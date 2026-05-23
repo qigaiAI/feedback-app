@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client';
 import Loading from '../components/Loading';
@@ -31,7 +31,16 @@ export default function StudentList() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedGroup, setSelectedGroup] = useState('');
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+
+  useEffect(() => {
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(debounceRef.current);
+  }, [search]);
+
   const [showAdd, setShowAdd] = useState(false);
   const [newName, setNewName] = useState('');
   const [newGrade, setNewGrade] = useState('');
@@ -45,7 +54,7 @@ export default function StudentList() {
     try {
       setError('');
       const params = new URLSearchParams();
-      if (search) params.append('search', search);
+      if (debouncedSearch) params.append('search', debouncedSearch);
       if (selectedGroup) params.append('group_id', selectedGroup);
       const [sRes, gRes] = await Promise.all([
         api.get(`/api/students?${params}`),
@@ -58,7 +67,7 @@ export default function StudentList() {
     } finally {
       setLoading(false);
     }
-  }, [search, selectedGroup]);
+  }, [debouncedSearch, selectedGroup]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 

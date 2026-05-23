@@ -10,6 +10,42 @@ interface Template {
   created_at: string;
 }
 
+interface Feedback {
+  id: string;
+  content: string;
+  student_name: string;
+  created_at: string;
+}
+
+const STYLE_OPTIONS = [
+  { key: 'warm', label: '语气亲切', text: '使用温暖亲切的语气，让学生和家长感到关怀。' },
+  { key: 'progress', label: '突出进步点', text: '重点强调学生相比之前的进步和成长。' },
+  { key: 'gentle', label: '委婉指出不足', text: '在表扬之后，以建议的方式委婉提及需要改进的地方。' },
+  { key: 'praise_first', label: '先表扬后建议', text: '每个段落先肯定优点，再给出建设性建议。' },
+  { key: 'concise', label: '简洁高效', text: '控制字数，直击要点，避免冗长。' },
+  { key: 'emoji', label: '适当使用表情', text: '在合适的位置使用 emoji 增强亲和力。' },
+];
+
+const MOCK_STUDENT = '小明，三年级，本节课学习分数加减法。专注度4星，正确率3星，基本掌握。积极发言，作业完成优秀。';
+
+function buildStyleFromOptions(selected: string[]): string {
+  if (selected.length === 0) return '';
+  const base = '你是一位专业的课后反馈撰写助手。请按以下风格要求生成反馈：\n';
+  const rules = selected
+    .map(k => STYLE_OPTIONS.find(o => o.key === k))
+    .filter(Boolean)
+    .map(o => `- ${o!.text}`);
+  return base + rules.join('\n') + '\n\n严格基于提供的评价数据，不编造任何信息。';
+}
+
+const EXAMPLE_TEMPLATE: Template = {
+  id: '__example__',
+  name: '专业鼓励型（示例）',
+  style_prompt: '你是一位富有经验的教育工作者。在写反馈时：先肯定学生的努力和进步，用具体的课堂表现作为例子；然后委婉地指出1-2个可以继续提高的地方，附带具体建议；最后给予温暖的鼓励。语气真诚、专业、有温度。每段反馈约150-200字。',
+  is_default: false,
+  created_at: '',
+};
+
 export default function Templates() {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
@@ -18,10 +54,12 @@ export default function Templates() {
 
   // Wizard state
   const [step, setStep] = useState<1 | 2 | 3>(1);
-  const [samples, setSamples] = useState('');
+  const [feedbacks, setFeedbacks] = useState<Feedback[]>([]);
+  const [selectedFeedbackIds, setSelectedFeedbackIds] = useState<Set<string>>(new Set());
   const [analyzing, setAnalyzing] = useState(false);
   const [stylePrompt, setStylePrompt] = useState('');
-  const [previewDesc, setPreviewDesc] = useState('');
+  const [selectedStyles, setSelectedStyles] = useState<Set<string>>(new Set());
+  const [previewDesc, setPreviewDesc] = useState(MOCK_STUDENT);
   const [previewResult, setPreviewResult] = useState('');
   const [previewing, setPreviewing] = useState(false);
   const [templateName, setTemplateName] = useState('');
@@ -30,8 +68,12 @@ export default function Templates() {
 
   const fetchTemplates = async () => {
     try {
-      const r = await api.get('/api/templates');
-      setTemplates(r.data.templates);
+      const [tRes, fRes] = await Promise.all([
+        api.get('/api/templates'),
+        api.get('/api/feedbacks/history?limit=50'),
+      ]);
+      setTemplates(tRes.data.templates);
+      setFeedbacks(fRes.data.feedbacks || []);
     } catch { /* ignore */ }
     finally { setLoading(false); }
   };
@@ -40,9 +82,10 @@ export default function Templates() {
 
   const resetWizard = () => {
     setStep(1);
-    setSamples('');
+    setSelectedFeedbackIds(new Set());
     setStylePrompt('');
-    setPreviewDesc('');
+    setSelectedStyles(new Set());
+    setPreviewDesc(MOCK_STUDENT);
     setPreviewResult('');
     setTemplateName('');
     setIsDefault(false);
@@ -63,15 +106,42 @@ export default function Templates() {
     setStylePrompt(t.style_prompt);
     setTemplateName(t.name);
     setIsDefault(t.is_default);
+    // Detect which styles match
+    const matched = new Set<string>();
+    STYLE_OPTIONS.forEach(o => {
+      if (t.style_prompt.includes(o.text)) matched.add(o.key);
+    });
+    setSelectedStyles(matched);
     setStep(2);
     setShowWizard(true);
   };
 
-  const analyze = async () => {
-    if (!samples.trim()) return;
+  const toggleStyle = (key: string) => {
+    setSelectedStyles(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  // When styles change, auto-combine into prompt
+  useEffect(() => {
+    const combined = buildStyleFromOptions([...selectedStyles]);
+    if (combined) setStylePrompt(combined);
+  }, [selectedStyles]);
+
+  const analyzeFromFeedbacks = async () => {
+    if (selectedFeedbackIds.size < 2) {
+      alert('请选择至少2条历史反馈');
+      return;
+    }
     setAnalyzing(true);
     try {
-      const r = await api.post('/api/template/analyze-style', { samples: [samples.trim()] });
+      const samples = feedbacks
+        .filter(f => selectedFeedbackIds.has(f.id))
+        .map(f => f.content);
+      const r = await api.post('/api/template/analyze-style', { samples });
       setStylePrompt(r.data.instruction);
       setStep(2);
     } catch { alert('分析失败，请重试'); }
@@ -119,20 +189,34 @@ export default function Templates() {
 
   const del = async (t: Template) => {
     if (!confirm(`确定删除模板"${t.name}"？`)) return;
-    try {
-      await api.delete(`/api/templates/${t.id}`);
-      fetchTemplates();
-    } catch { alert('删除失败'); }
+    try { await api.delete(`/api/templates/${t.id}`); fetchTemplates(); }
+    catch { alert('删除失败'); }
   };
 
   const setDefault = async (id: string) => {
-    try {
-      await api.put(`/api/templates/${id}/default`);
-      fetchTemplates();
-    } catch { alert('设置失败'); }
+    try { await api.put(`/api/templates/${id}/default`); fetchTemplates(); }
+    catch { alert('设置失败'); }
+  };
+
+  const useExample = () => {
+    setStylePrompt(EXAMPLE_TEMPLATE.style_prompt);
+    setTemplateName(EXAMPLE_TEMPLATE.name);
+    setStep(2);
+    setShowWizard(true);
+  };
+
+  const toggleFeedback = (id: string) => {
+    setSelectedFeedbackIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else if (next.size < 4) next.add(id);
+      return next;
+    });
   };
 
   if (loading) return <Loading />;
+
+  const showExample = templates.length === 0 && !showWizard;
 
   return (
     <div className="px-4 py-4">
@@ -141,31 +225,45 @@ export default function Templates() {
 
       {!showWizard ? (
         <>
-          {/* Template list */}
-          <div className="space-y-3 mb-4">
-            {templates.map(t => (
-              <div key={t.id} className={`card ${t.is_default ? 'ring-2 ring-primary-300' : ''}`}>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="font-medium text-sm">{t.name}</span>
-                  <div className="flex gap-2">
-                    {!t.is_default && (
-                      <button onClick={() => setDefault(t.id)} className="text-xs text-primary-500">设为默认</button>
-                    )}
-                    {t.is_default && <span className="text-xs text-primary-400">默认</span>}
-                    <button onClick={() => openEdit(t)} className="text-xs text-gray-500">编辑</button>
-                    <button onClick={() => del(t)} className="text-xs text-red-400">删除</button>
+          {/* Example template card */}
+          {showExample && (
+            <div className="card mb-4 bg-blue-50 border-blue-200">
+              <div className="flex items-center justify-between mb-2">
+                <span className="font-medium text-sm text-blue-800">{EXAMPLE_TEMPLATE.name}</span>
+                <span className="text-xs text-blue-400">示例</span>
+              </div>
+              <p className="text-xs text-blue-600 whitespace-pre-wrap mb-3 line-clamp-3">{EXAMPLE_TEMPLATE.style_prompt}</p>
+              <div className="bg-white rounded-lg p-3 text-xs text-gray-600 mb-3 italic">
+                "小明同学今天表现非常棒！在分数加减法的练习中，你的专注度让老师印象深刻..."
+              </div>
+              <div className="flex gap-2">
+                <button onClick={useExample} className="btn-primary text-sm flex-1">使用此模板</button>
+                <button onClick={openNew} className="btn-secondary text-sm flex-1">自定义模板</button>
+              </div>
+            </div>
+          )}
+
+          {/* Existing templates */}
+          {templates.length > 0 && (
+            <div className="space-y-3 mb-4">
+              {templates.map(t => (
+                <div key={t.id} className={`card ${t.is_default ? 'ring-2 ring-primary-300' : ''}`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-medium text-sm">{t.name}</span>
+                    <div className="flex gap-2">
+                      {!t.is_default && (
+                        <button onClick={() => setDefault(t.id)} className="text-xs text-primary-500">设为默认</button>
+                      )}
+                      {t.is_default && <span className="text-xs text-primary-400">默认</span>}
+                      <button onClick={() => openEdit(t)} className="text-xs text-gray-500">编辑</button>
+                      <button onClick={() => del(t)} className="text-xs text-red-400">删除</button>
+                    </div>
                   </div>
+                  <p className="text-xs text-gray-500 line-clamp-2 whitespace-pre-wrap">{t.style_prompt}</p>
                 </div>
-                <p className="text-xs text-gray-500 line-clamp-2 whitespace-pre-wrap">{t.style_prompt}</p>
-              </div>
-            ))}
-            {templates.length === 0 && (
-              <div className="text-center py-8 text-gray-400">
-                <p className="text-sm">还没有模板</p>
-                <p className="text-xs mt-1">点击下方按钮创建你的第一个风格模板</p>
-              </div>
-            )}
-          </div>
+              ))}
+            </div>
+          )}
 
           <button onClick={openNew} className="btn-primary w-full" disabled={templates.length >= 3}>
             {templates.length >= 3 ? '已达上限（3个）' : '+ 新建模板'}
@@ -173,7 +271,6 @@ export default function Templates() {
         </>
       ) : (
         <>
-          {/* Back */}
           <button onClick={() => { setShowWizard(false); resetWizard(); }} className="text-sm text-primary-600 mb-4">
             &larr; 返回模板列表
           </button>
@@ -191,43 +288,78 @@ export default function Templates() {
               </div>
             ))}
           </div>
-          <div className="flex justify-center gap-6 text-xs text-gray-400 mb-4">
-            <span className={step === 1 ? 'text-primary-600 font-medium' : ''}>学习风格</span>
-            <span className={step === 2 ? 'text-primary-600 font-medium' : ''}>编辑指令</span>
-            <span className={step === 3 ? 'text-primary-600 font-medium' : ''}>预览保存</span>
-          </div>
 
-          {/* Step 1: Learn from history */}
+          {/* Step 1: Learn from selected feedbacks */}
           {step === 1 && (
-            <div className="card space-y-3">
-              <p className="text-sm font-medium">第一步：从历史反馈学习风格</p>
-              <p className="text-xs text-gray-500">粘贴一段你的历史反馈文本，AI 将分析你的写作风格并生成初始指令。</p>
-              <textarea
-                className="input min-h-[150px]"
-                placeholder="粘贴历史反馈样本..."
-                value={samples}
-                onChange={e => setSamples(e.target.value)}
-              />
-              <p className="text-xs text-gray-400">
-                也可以跳过此步骤，直接手动编写风格指令。
-              </p>
+            <div className="space-y-4">
+              <div className="card space-y-3">
+                <p className="text-sm font-medium">第一步：选择历史反馈学习风格</p>
+                <p className="text-xs text-gray-500">选择 2-4 条历史反馈，AI 将分析共同特点生成风格指令。</p>
+                {feedbacks.length === 0 ? (
+                  <p className="text-sm text-gray-400 py-4 text-center">暂无历史反馈，请先写一些反馈或跳过此步骤。</p>
+                ) : (
+                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                    {feedbacks.slice(0, 20).map(f => (
+                      <button
+                        key={f.id}
+                        onClick={() => toggleFeedback(f.id)}
+                        className={`w-full text-left p-3 rounded-lg border text-xs ${
+                          selectedFeedbackIds.has(f.id)
+                            ? 'bg-primary-50 border-primary-300'
+                            : 'bg-white border-gray-200'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="font-medium">{f.student_name}</span>
+                          <span className="text-gray-400">{new Date(f.created_at).toLocaleDateString('zh-CN')}</span>
+                        </div>
+                        <p className="text-gray-600 line-clamp-2">{f.content}</p>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <p className="text-xs text-gray-400">已选 {selectedFeedbackIds.size}/4 条</p>
+              </div>
               <div className="flex gap-2">
-                <button onClick={() => { setStep(2); }} className="btn-secondary flex-1">
-                  跳过，手动编写
-                </button>
-                <button onClick={analyze} className="btn-primary flex-1" disabled={analyzing || !samples.trim()}>
-                  {analyzing ? '分析中...' : '分析并生成'}
+                <button onClick={() => setStep(2)} className="btn-secondary flex-1">跳过，手动编写</button>
+                <button
+                  onClick={analyzeFromFeedbacks}
+                  className="btn-primary flex-1"
+                  disabled={analyzing || selectedFeedbackIds.size < 2}
+                >
+                  {analyzing ? '分析中...' : `分析风格 (${selectedFeedbackIds.size}条)`}
                 </button>
               </div>
             </div>
           )}
 
-          {/* Step 2: Edit style prompt */}
+          {/* Step 2: Edit style prompt with checkbox options */}
           {step === 2 && (
             <div className="space-y-4">
+              {/* Style checkboxes */}
               <div className="card space-y-2">
-                <p className="text-sm font-medium">第二步：编辑风格指令</p>
-                <p className="text-xs text-gray-500">这是 AI 在生成反馈时遵循的"人格指令"。包含称呼、语气、格式、结构等。</p>
+                <p className="text-sm font-medium">快速风格选项</p>
+                <p className="text-xs text-gray-500">勾选后自动生成风格指令，也可直接在下方手动修改。</p>
+                <div className="flex flex-wrap gap-2">
+                  {STYLE_OPTIONS.map(opt => (
+                    <button
+                      key={opt.key}
+                      onClick={() => toggleStyle(opt.key)}
+                      className={`text-xs px-3 py-1.5 rounded-full border ${
+                        selectedStyles.has(opt.key)
+                          ? 'bg-primary-100 border-primary-300 text-primary-700'
+                          : 'bg-white border-gray-200 text-gray-500'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="card space-y-2">
+                <p className="text-sm font-medium">风格指令编辑</p>
+                <p className="text-xs text-gray-500">您可以在此修改指令，让 AI 按您的要求生成反馈。</p>
                 <textarea
                   className="input min-h-[200px] font-mono text-xs"
                   value={stylePrompt}
@@ -236,10 +368,33 @@ export default function Templates() {
                 />
               </div>
 
+              {/* Quick preview button */}
+              <button
+                onClick={async () => {
+                  if (!stylePrompt) return;
+                  setPreviewing(true);
+                  try {
+                    const r = await api.post('/api/template/preview-style', {
+                      prompt: stylePrompt,
+                      test_description: MOCK_STUDENT,
+                    });
+                    setPreviewResult(r.data.preview);
+                  } catch { alert('预览失败'); }
+                  finally { setPreviewing(false); }
+                }}
+                className="btn-secondary w-full text-sm"
+                disabled={previewing || !stylePrompt}
+              >
+                {previewing ? '生成中...' : '按当前风格生成示例预览'}
+              </button>
+              {previewResult && (
+                <div className="bg-gray-50 rounded-lg p-3 text-sm whitespace-pre-wrap border">{previewResult}</div>
+              )}
+
               <div className="flex gap-2">
                 <button onClick={() => setStep(1)} className="btn-secondary flex-1">&larr; 上一步</button>
-                <button onClick={() => setStep(3)} className="btn-primary flex-1" disabled={!stylePrompt.trim()}>
-                  下一步：预览 &rarr;
+                <button onClick={() => { setStep(3); setPreviewResult(''); }} className="btn-primary flex-1" disabled={!stylePrompt.trim()}>
+                  下一步 &rarr;
                 </button>
               </div>
             </div>
@@ -250,9 +405,9 @@ export default function Templates() {
             <div className="space-y-4">
               <div className="card space-y-3">
                 <p className="text-sm font-medium">第三步：预览效果并保存</p>
-                <input
-                  className="input"
-                  placeholder="输入测试描述，如：小明今天学会了分数加减法"
+                <textarea
+                  className="input min-h-[80px] text-sm"
+                  placeholder="输入测试描述..."
                   value={previewDesc}
                   onChange={e => setPreviewDesc(e.target.value)}
                 />
@@ -260,7 +415,7 @@ export default function Templates() {
                   {previewing ? '生成中...' : '生成预览'}
                 </button>
                 {previewResult && (
-                  <div className="bg-gray-50 rounded-lg p-3 text-sm whitespace-pre-wrap border">{previewResult}</div>
+                  <div className="bg-gray-50 rounded-lg p-4 text-sm whitespace-pre-wrap border min-h-[200px]">{previewResult}</div>
                 )}
               </div>
 
@@ -273,13 +428,8 @@ export default function Templates() {
                   onChange={e => setTemplateName(e.target.value)}
                 />
                 <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={isDefault}
-                    onChange={e => setIsDefault(e.target.checked)}
-                    className="w-4 h-4"
-                  />
-                  设为默认模板（写反馈时自动选择）
+                  <input type="checkbox" checked={isDefault} onChange={e => setIsDefault(e.target.checked)} className="w-4 h-4" />
+                  设为默认模板
                 </label>
                 <div className="flex gap-2">
                   <button onClick={() => setStep(2)} className="btn-secondary flex-1">&larr; 上一步</button>

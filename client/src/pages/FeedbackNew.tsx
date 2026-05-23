@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
 import StarRating from '../components/StarRating';
@@ -58,8 +58,8 @@ interface StudentEval {
   lastFeedbackLoading: boolean;
 }
 
-const PROGRESS_OPTS = ['有进步', '进步很大', '有一点退步'];
-const CURRENT_OPTS = ['还需提高', '还不错', '非常好'];
+const PROGRESS_OPTS = ['有进步', '进步很大', '状态保持', '没有进步', '有所退步', '退步比较明显'];
+const CURRENT_OPTS = ['还需提高', '基本达标', '还不错', '非常好', '表现卓越'];
 const MASTERY_OPTS = ['完全掌握', '基本掌握', '部分掌握', '需重新讲解'];
 
 export default function FeedbackNew() {
@@ -71,13 +71,14 @@ export default function FeedbackNew() {
   const [students, setStudents] = useState<Student[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [filterGroup, setFilterGroup] = useState('');
+  const [selectedClassId, setSelectedClassId] = useState<string>('');
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
 
   // Evaluation
   const [evals, setEvals] = useState<StudentEval[]>([]);
   const [currentIdx, setCurrentIdx] = useState(0);
+  const [inheritContent, setInheritContent] = useState(true);
   const [behaviorTags, setBehaviorTags] = useState<BehaviorTag[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
@@ -96,24 +97,35 @@ export default function FeedbackNew() {
         setGroups(gRes.data.groups);
         setBehaviorTags(btRes.data.tags);
         setTemplates(tRes.data.templates);
-        // Auto-select default template
         const def = tRes.data.templates.find((t: Template) => t.is_default);
         if (def) setSelectedTemplateId(def.id);
-
+        // Auto-select first class
+        if (gRes.data.groups.length > 0 && !prefilledStudentId) {
+          setSelectedClassId(gRes.data.groups[0].id);
+        }
         if (prefilledStudentId) {
           setSelectedIds(new Set([prefilledStudentId]));
+          // Find which class this student belongs to
+          const student = sRes.data.students.find((s: Student) => s.id === prefilledStudentId);
+          if (student?.groups.length > 0) {
+            setSelectedClassId(student.groups[0].id);
+          }
         }
       })
       .finally(() => setLoading(false));
   }, [prefilledStudentId]);
 
+  // Filter students by selected class
   const filteredStudents = students.filter(s => {
+    if (!selectedClassId) return false;
     if (search && !s.name.includes(search)) return false;
-    if (filterGroup) {
-      return s.groups.some(g => g.id === filterGroup);
-    }
-    return true;
+    return s.groups.some(g => g.id === selectedClassId);
   });
+
+  const handleClassChange = (classId: string) => {
+    setSelectedClassId(classId);
+    setSelectedIds(new Set()); // Clear selection on class switch
+  };
 
   const toggleStudent = (id: string) => {
     setSelectedIds(prev => {
@@ -122,6 +134,16 @@ export default function FeedbackNew() {
       else next.add(id);
       return next;
     });
+  };
+
+  const toggleAllInClass = () => {
+    const classStudentIds = filteredStudents.map(s => s.id);
+    const allSelected = classStudentIds.every(id => selectedIds.has(id));
+    if (allSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(classStudentIds));
+    }
   };
 
   const startEval = async () => {
@@ -222,13 +244,37 @@ export default function FeedbackNew() {
       <div className="px-4 py-4">
         <h2 className="text-lg font-bold mb-4">选择学生</h2>
 
-        <div className="flex gap-2 mb-3">
-          <input className="input flex-1" placeholder="搜索..." value={search} onChange={e => setSearch(e.target.value)} />
-          <select className="input w-1/3" value={filterGroup} onChange={e => setFilterGroup(e.target.value)}>
-            <option value="">全部班级</option>
-            {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
-          </select>
+        {/* Class tabs - single selection */}
+        <div className="flex gap-2 mb-3 overflow-x-auto pb-1">
+          {groups.map(g => (
+            <button
+              key={g.id}
+              onClick={() => handleClassChange(g.id)}
+              className={`text-sm px-3 py-1.5 rounded-full whitespace-nowrap border ${
+                selectedClassId === g.id
+                  ? 'bg-primary-600 text-white border-primary-600'
+                  : 'bg-white text-gray-600 border-gray-200'
+              }`}
+            >
+              {g.name} ({g.student_count})
+            </button>
+          ))}
         </div>
+
+        {selectedClassId && (
+          <>
+            <div className="flex gap-2 mb-3">
+              <input className="input flex-1" placeholder="搜索学生..." value={search} onChange={e => setSearch(e.target.value)} />
+              <button onClick={toggleAllInClass} className="btn-secondary text-xs whitespace-nowrap">
+                {filteredStudents.every(s => selectedIds.has(s.id)) ? '取消全选' : '全选'}
+              </button>
+            </div>
+
+            <div className="text-xs text-gray-400 mb-2">
+              已选 {selectedIds.size} / {filteredStudents.length} 人
+            </div>
+          </>
+        )}
 
         <div className="space-y-2 mb-4">
           {filteredStudents.map(s => (
@@ -248,11 +294,16 @@ export default function FeedbackNew() {
                 <div className="font-medium">{s.name}</div>
                 <div className="text-xs text-gray-500">
                   {s.grade || '未设置年级'}
-                  {s.groups.length > 0 && ` · ${s.groups.map(g => g.name).join(', ')}`}
                 </div>
               </div>
             </button>
           ))}
+          {selectedClassId && filteredStudents.length === 0 && (
+            <p className="text-center text-gray-400 py-8 text-sm">该班级暂无学生</p>
+          )}
+          {!selectedClassId && (
+            <p className="text-center text-gray-400 py-8 text-sm">请选择一个班级</p>
+          )}
         </div>
 
         <button
@@ -262,6 +313,20 @@ export default function FeedbackNew() {
         >
           下一步 ({selectedIds.size}人)
         </button>
+      </div>
+    );
+  }
+
+  // ---- Phase: Generating ----
+  if (phase === 'generating') {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center px-6">
+        <div className="w-12 h-12 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin mb-4" />
+        <p className="text-lg font-medium text-gray-700">正在生成反馈...</p>
+        <p className="text-sm text-gray-400 mt-1">预计 3-5 秒</p>
+        <div className="w-48 bg-gray-200 rounded-full h-1.5 mt-4 overflow-hidden">
+          <div className="bg-primary-600 h-full rounded-full animate-pulse" style={{ width: '60%' }} />
+        </div>
       </div>
     );
   }
@@ -438,7 +503,20 @@ export default function FeedbackNew() {
 
         {/* Knowledge text (free form) */}
         <div className="card">
-          <p className="label mb-1">本节课学习内容</p>
+          <div className="flex items-center justify-between mb-1">
+            <p className="label">本节课学习内容</p>
+            {currentIdx > 0 && (
+              <label className="flex items-center gap-1 text-xs text-gray-400">
+                <input
+                  type="checkbox"
+                  checked={inheritContent}
+                  onChange={e => setInheritContent(e.target.checked)}
+                  className="w-3.5 h-3.5"
+                />
+                沿用上一位学生
+              </label>
+            )}
+          </div>
           <textarea
             className="input min-h-[70px]"
             placeholder="直接输入本节课所学内容，如：分数乘法、约分、应用题..."
@@ -477,7 +555,29 @@ export default function FeedbackNew() {
             </button>
           )}
           {currentIdx < evals.length - 1 ? (
-            <button className="btn-primary flex-1" onClick={() => setCurrentIdx(i => i + 1)}>
+            <button
+              className="btn-primary flex-1"
+              onClick={() => {
+                const prev = evals[currentIdx];
+                setCurrentIdx(i => {
+                  const next = i + 1;
+                  // Inherit content from previous student
+                  if (inheritContent) {
+                    setEvals(prevEvals => prevEvals.map((e, idx) => {
+                      if (idx === next) {
+                        return {
+                          ...e,
+                          knowledge_text: e.knowledge_text || prev.knowledge_text,
+                          homework: e.homework || prev.homework,
+                        };
+                      }
+                      return e;
+                    }));
+                  }
+                  return next;
+                });
+              }}
+            >
               下一个学生
             </button>
           ) : (

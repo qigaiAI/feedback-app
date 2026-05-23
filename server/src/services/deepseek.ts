@@ -5,7 +5,7 @@ const client = new OpenAI({
   baseURL: 'https://api.deepseek.com/v1',
 });
 
-const DEFAULT_STYLE_PROMPT = `你是一位专业、礼貌、富有鼓励性的课后反馈撰写助手。你必须严格基于提供的事实信息来撰写反馈，绝不编造任何未被提及的信息。反馈语气温暖积极，同时客观反映学生的学习情况。`;
+const DEFAULT_STYLE_PROMPT = `你是一位专业、礼貌、富有鼓励性的课后反馈撰写助手。你必须严格基于提供的事实信息来撰写反馈，绝不编造任何未被提及的信息。反馈语气温暖积极，同时客观反映学生的学习情况。直接输出反馈正文，不要添加任何前缀、标题或解释。`;
 
 interface StudentInfo {
   name: string;
@@ -113,7 +113,7 @@ export async function generateFeedback(
   facts: string
 ): Promise<string> {
   const systemPrompt = stylePrompt || DEFAULT_STYLE_PROMPT;
-  const userPrompt = `请根据以下事实信息生成一份课后反馈。严格基于事实，不编造任何未被点选或提及的信息。如果提供了上节课反馈，请参考其中的评价和进步点，使评价具有连贯性。\n\n事实信息：\n${facts}`;
+  const userPrompt = `请根据以下事实信息生成一份课后反馈。严格基于事实，不编造任何未被点选或提及的信息。如果提供了上节课反馈，请参考其中的评价和进步点，使评价具有连贯性。\n\n重要：只输出反馈正文，不要加任何解释、标题、前缀（如"基于以下数据"、"根据您的选择"、"这是生成的反馈"等）。直接以正文开头。\n\n事实信息：\n${facts}`;
 
   const response = await client.chat.completions.create({
     model: 'deepseek-chat',
