@@ -57,6 +57,8 @@ export default function Templates() {
   const [feedbacks, setFeedbacks] = useState<Feedback[]>([]);
   const [selectedFeedbackIds, setSelectedFeedbackIds] = useState<Set<string>>(new Set());
   const [analyzing, setAnalyzing] = useState(false);
+  const [learnMode, setLearnMode] = useState<'select' | 'paste'>('select');
+  const [samples, setSamples] = useState('');
   const [stylePrompt, setStylePrompt] = useState('');
   const [selectedStyles, setSelectedStyles] = useState<Set<string>>(new Set());
   const [previewDesc, setPreviewDesc] = useState(MOCK_STUDENT);
@@ -138,10 +140,24 @@ export default function Templates() {
     }
     setAnalyzing(true);
     try {
-      const samples = feedbacks
+      const sampleTexts = feedbacks
         .filter(f => selectedFeedbackIds.has(f.id))
         .map(f => f.content);
-      const r = await api.post('/api/template/analyze-style', { samples });
+      const r = await api.post('/api/template/analyze-style', { samples: sampleTexts });
+      setStylePrompt(r.data.instruction);
+      setStep(2);
+    } catch { alert('分析失败，请重试'); }
+    finally { setAnalyzing(false); }
+  };
+
+  const analyzeFromPaste = async () => {
+    if (!samples.trim() || samples.trim().length < 20) {
+      alert('请粘贴至少20字的反馈样本');
+      return;
+    }
+    setAnalyzing(true);
+    try {
+      const r = await api.post('/api/template/analyze-style', { samples: [samples.trim()] });
       setStylePrompt(r.data.instruction);
       setStep(2);
     } catch { alert('分析失败，请重试'); }
@@ -289,47 +305,88 @@ export default function Templates() {
             ))}
           </div>
 
-          {/* Step 1: Learn from selected feedbacks */}
+          {/* Step 1: Learn from feedbacks or paste */}
           {step === 1 && (
             <div className="space-y-4">
-              <div className="card space-y-3">
-                <p className="text-sm font-medium">第一步：选择历史反馈学习风格</p>
-                <p className="text-xs text-gray-500">选择 2-4 条历史反馈，AI 将分析共同特点生成风格指令。</p>
-                {feedbacks.length === 0 ? (
-                  <p className="text-sm text-gray-400 py-4 text-center">暂无历史反馈，请先写一些反馈或跳过此步骤。</p>
-                ) : (
-                  <div className="space-y-2 max-h-64 overflow-y-auto">
-                    {feedbacks.slice(0, 20).map(f => (
-                      <button
-                        key={f.id}
-                        onClick={() => toggleFeedback(f.id)}
-                        className={`w-full text-left p-3 rounded-lg border text-xs ${
-                          selectedFeedbackIds.has(f.id)
-                            ? 'bg-primary-50 border-primary-300'
-                            : 'bg-white border-gray-200'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="font-medium">{f.student_name}</span>
-                          <span className="text-gray-400">{new Date(f.created_at).toLocaleDateString('zh-CN')}</span>
-                        </div>
-                        <p className="text-gray-600 line-clamp-2">{f.content}</p>
-                      </button>
-                    ))}
-                  </div>
-                )}
-                <p className="text-xs text-gray-400">已选 {selectedFeedbackIds.size}/4 条</p>
-              </div>
-              <div className="flex gap-2">
-                <button onClick={() => setStep(2)} className="btn-secondary flex-1">跳过，手动编写</button>
+              {/* Mode tabs */}
+              <div className="flex border-b border-gray-200">
                 <button
-                  onClick={analyzeFromFeedbacks}
-                  className="btn-primary flex-1"
-                  disabled={analyzing || selectedFeedbackIds.size < 2}
+                  onClick={() => setLearnMode('select')}
+                  className={`px-4 py-2 text-sm border-b-2 -mb-px ${
+                    learnMode === 'select' ? 'border-primary-600 text-primary-600' : 'border-transparent text-gray-500'
+                  }`}
                 >
-                  {analyzing ? '分析中...' : `分析风格 (${selectedFeedbackIds.size}条)`}
+                  选择历史反馈
+                </button>
+                <button
+                  onClick={() => setLearnMode('paste')}
+                  className={`px-4 py-2 text-sm border-b-2 -mb-px ${
+                    learnMode === 'paste' ? 'border-primary-600 text-primary-600' : 'border-transparent text-gray-500'
+                  }`}
+                >
+                  手动粘贴
                 </button>
               </div>
+
+              {learnMode === 'select' && (
+                <div className="card space-y-3">
+                  <p className="text-xs text-gray-500">选择 2-4 条历史反馈，AI 将分析共同特点生成风格指令。</p>
+                  {feedbacks.length === 0 ? (
+                    <p className="text-sm text-gray-400 py-4 text-center">暂无历史反馈，请切换到"手动粘贴"模式。</p>
+                  ) : (
+                    <div className="space-y-2 max-h-64 overflow-y-auto">
+                      {feedbacks.slice(0, 20).map(f => (
+                        <button
+                          key={f.id}
+                          onClick={() => toggleFeedback(f.id)}
+                          className={`w-full text-left p-3 rounded-lg border text-xs ${
+                            selectedFeedbackIds.has(f.id)
+                              ? 'bg-primary-50 border-primary-300'
+                              : 'bg-white border-gray-200'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="font-medium">{f.student_name}</span>
+                            <span className="text-gray-400">{new Date(f.created_at).toLocaleDateString('zh-CN')}</span>
+                          </div>
+                          <p className="text-gray-600 line-clamp-2">{f.content}</p>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <p className="text-xs text-gray-400">已选 {selectedFeedbackIds.size}/4 条</p>
+                  <button
+                    onClick={analyzeFromFeedbacks}
+                    className="btn-primary w-full"
+                    disabled={analyzing || selectedFeedbackIds.size < 2}
+                  >
+                    {analyzing ? '分析中...' : `分析风格 (${selectedFeedbackIds.size}条)`}
+                  </button>
+                </div>
+              )}
+
+              {learnMode === 'paste' && (
+                <div className="card space-y-3">
+                  <p className="text-xs text-gray-500">粘贴一段或多段你的历史反馈文本，AI 将分析写作风格。</p>
+                  <textarea
+                    className="input min-h-[150px]"
+                    placeholder="粘贴历史反馈样本...&#10;&#10;可以粘贴一条或多条，AI 会自动分析风格特点。"
+                    value={samples}
+                    onChange={e => setSamples(e.target.value)}
+                  />
+                  <button
+                    onClick={analyzeFromPaste}
+                    className="btn-primary w-full"
+                    disabled={analyzing || samples.trim().length < 20}
+                  >
+                    {analyzing ? '分析中...' : '分析风格'}
+                  </button>
+                </div>
+              )}
+
+              <button onClick={() => setStep(2)} className="btn-secondary w-full">
+                跳过学习，手动编写风格指令
+              </button>
             </div>
           )}
 

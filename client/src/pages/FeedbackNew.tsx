@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { api } from '../api/client';
 import StarRating from '../components/StarRating';
 import Loading from '../components/Loading';
@@ -64,8 +64,12 @@ const MASTERY_OPTS = ['完全掌握', '基本掌握', '部分掌握', '需重新
 
 export default function FeedbackNew() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const locationState = location.state as { returnEvals?: StudentEval[]; returnTemplateId?: string } | null;
   const [searchParams] = useSearchParams();
-  const [phase, setPhase] = useState<'select' | 'evaluate' | 'generating'>('select');
+  const [phase, setPhase] = useState<'select' | 'evaluate' | 'generating'>(
+    locationState?.returnEvals ? 'evaluate' : 'select'
+  );
 
   // Student selection
   const [students, setStudents] = useState<Student[]>([]);
@@ -84,6 +88,18 @@ export default function FeedbackNew() {
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
 
   const prefilledStudentId = searchParams.get('student');
+
+  // Restore from result page "back to modify"
+  useEffect(() => {
+    if (locationState?.returnEvals) {
+      setEvals(locationState.returnEvals);
+      if (locationState.returnTemplateId) {
+        setSelectedTemplateId(locationState.returnTemplateId);
+      }
+      // Clear the location state so it doesn't persist on refresh
+      window.history.replaceState({}, '');
+    }
+  }, []);
 
   useEffect(() => {
     Promise.all([
@@ -229,7 +245,13 @@ export default function FeedbackNew() {
         template_id: selectedTemplateId || undefined,
         students: payload,
       });
-      navigate('/feedback/result', { state: { feedbacks: res.data.feedbacks } });
+      navigate('/feedback/result', {
+        state: {
+          feedbacks: res.data.feedbacks,
+          returnEvals: evals,
+          returnTemplateId: selectedTemplateId,
+        },
+      });
     } catch {
       alert('生成失败，请重试');
       setPhase('evaluate');

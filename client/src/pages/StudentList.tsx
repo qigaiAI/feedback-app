@@ -168,12 +168,12 @@ export default function StudentList() {
           className="input flex-1"
           placeholder="搜索学生..."
           value={search}
-          onChange={e => { setSearch(e.target.value); setLoading(true); }}
+          onChange={e => setSearch(e.target.value)}
         />
         <select
           className="input w-1/3"
           value={selectedGroup}
-          onChange={e => { setSelectedGroup(e.target.value); setLoading(true); }}
+          onChange={e => setSelectedGroup(e.target.value)}
         >
           <option value="">全部班级</option>
           {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}

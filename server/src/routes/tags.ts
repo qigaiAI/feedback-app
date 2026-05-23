@@ -139,7 +139,7 @@ router.put('/behavior/:id', async (req: AuthRequest, res: Response) => {
 router.delete('/behavior/:id', async (req: AuthRequest, res: Response) => {
   try {
     const result = await pool.query(
-      'DELETE FROM behavior_tags WHERE id = $1 AND teacher_id = $2 RETURNING id',
+      'DELETE FROM behavior_tags WHERE id = $1 AND (teacher_id = $2 OR teacher_id IS NULL) RETURNING id',
       [req.params.id, req.userId]
     );
     if (result.rows.length === 0) {

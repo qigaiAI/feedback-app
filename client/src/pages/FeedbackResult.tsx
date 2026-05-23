@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { copyToClipboard, openWechat } from '../utils/clipboard';
-import { api } from '../api/client';
 
 interface FeedbackItem {
   student_id: string;
@@ -12,10 +11,13 @@ interface FeedbackItem {
 export default function FeedbackResult() {
   const location = useLocation();
   const navigate = useNavigate();
-  const state = location.state as { feedbacks: FeedbackItem[] } | null;
+  const state = location.state as {
+    feedbacks: FeedbackItem[];
+    returnEvals?: any[];
+    returnTemplateId?: string;
+  } | null;
   const [editing, setEditing] = useState<Record<number, string>>({});
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
-  const [regenerating, setRegenerating] = useState(false);
 
   if (!state?.feedbacks || state.feedbacks.length === 0) {
     return (
@@ -59,7 +61,12 @@ export default function FeedbackResult() {
           <button onClick={() => navigate('/feedback/new')} className="text-sm text-primary-600">
             &larr; 返回选人
           </button>
-          <button onClick={() => navigate(-2)} className="text-sm text-gray-400">
+          <button
+            onClick={() => navigate('/feedback/new', {
+              state: { returnEvals: state.returnEvals, returnTemplateId: state.returnTemplateId },
+            })}
+            className="text-sm text-gray-400"
+          >
             返回修改
           </button>
         </div>

@@ -52,7 +52,7 @@ function BehaviorTab() {
 
   const remove = async (id: string) => {
     try { await api.delete(`/api/tags/behavior/${id}`); fetchTags(); }
-    catch { alert('只能删除自定义标签'); }
+    catch { alert('删除失败'); }
   };
 
   if (loading) return <Loading />;
@@ -70,9 +70,7 @@ function BehaviorTab() {
               <span>{t.name}</span>
               {!t.teacher_id && <span className="text-xs text-gray-400">(系统)</span>}
             </div>
-            {t.teacher_id && (
-              <button onClick={() => remove(t.id)} className="text-sm text-red-400">删除</button>
-            )}
+            <button onClick={() => remove(t.id)} className="text-sm text-red-400">删除</button>
           </div>
         ))}
       </div>
