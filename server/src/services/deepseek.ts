@@ -7,17 +7,118 @@ const client = new OpenAI({
 
 const DEFAULT_STYLE_PROMPT = `你是一位专业、礼貌、富有鼓励性的课后反馈撰写助手。你必须严格基于提供的事实信息来撰写反馈，绝不编造任何未被提及的信息。反馈语气温暖积极，同时客观反映学生的学习情况。`;
 
+interface StudentInfo {
+  name: string;
+  grade?: string | null;
+  notes?: string | null;
+}
+
+interface EvaluationData {
+  focus?: number;
+  accuracy?: number;
+  mastery?: string;
+  participation?: { progress?: string; current?: string };
+  thinking?: { progress?: string; current?: string };
+  habits?: { progress?: string; current?: string };
+  knowledge_depth?: { progress?: string; current?: string };
+}
+
+interface FeedbackInput {
+  student: StudentInfo;
+  evaluations?: EvaluationData;
+  behavior_tags?: string[];
+  knowledge_text?: string;
+  extra_comment?: string;
+  homework?: string;
+  previous_feedback_text?: string;
+}
+
+export function buildFeedbackFacts(input: FeedbackInput): string {
+  const { student, evaluations, behavior_tags, knowledge_text, extra_comment, homework, previous_feedback_text } = input;
+  const parts: string[] = [];
+
+  // Student info
+  const header = [`学生：${student.name}`];
+  if (student.grade) header.push(`年级：${student.grade}`);
+  if (student.notes) header.push(`备注（AI注意）：${student.notes}`);
+  parts.push(header.join(' | '));
+
+  // Previous feedback
+  if (previous_feedback_text) {
+    parts.push(`\n【上节课反馈内容】\n${previous_feedback_text}`);
+  }
+
+  // Evaluations
+  if (evaluations) {
+    const evalLines: string[] = [];
+
+    if (evaluations.focus) {
+      evalLines.push(`- 专注度：${'★'.repeat(evaluations.focus)}${'☆'.repeat(5 - evaluations.focus)} (${evaluations.focus}/5)`);
+    }
+    if (evaluations.accuracy) {
+      evalLines.push(`- 正确率：${'★'.repeat(evaluations.accuracy)}${'☆'.repeat(5 - evaluations.accuracy)} (${evaluations.accuracy}/5)`);
+    }
+    if (evaluations.mastery) {
+      evalLines.push(`- 掌握情况：${evaluations.mastery}`);
+    }
+
+    // Four new dimensions
+    const dimLabels: Record<string, string> = {
+      participation: '参与互动度',
+      thinking: '思维与反应质量',
+      habits: '学习习惯',
+      knowledge_depth: '知识掌握程度',
+    };
+
+    for (const [key, label] of Object.entries(dimLabels)) {
+      const dim = (evaluations as any)[key];
+      if (dim && (dim.progress || dim.current)) {
+        const items: string[] = [];
+        if (dim.progress) items.push(`进步评价：${dim.progress}`);
+        if (dim.current) items.push(`当前表现：${dim.current}`);
+        evalLines.push(`- ${label}：${items.join('，')}`);
+      }
+    }
+
+    if (evalLines.length > 0) {
+      parts.push(`\n【本节课评价】\n${evalLines.join('\n')}`);
+    }
+  }
+
+  // Behavior tags
+  if (behavior_tags && behavior_tags.length > 0) {
+    parts.push(`\n课堂表现标签：${behavior_tags.join('、')}`);
+  }
+
+  // Knowledge text (free form)
+  if (knowledge_text) {
+    parts.push(`\n本节课学习内容：${knowledge_text}`);
+  }
+
+  // Homework
+  if (homework) {
+    parts.push(`\n课后作业：${homework}`);
+  }
+
+  // Extra comment
+  if (extra_comment) {
+    parts.push(`\n老师补充：${extra_comment}`);
+  }
+
+  return parts.join('\n');
+}
+
 export async function generateFeedback(
   stylePrompt: string | null,
   facts: string
 ): Promise<string> {
   const systemPrompt = stylePrompt || DEFAULT_STYLE_PROMPT;
-  const userPrompt = `请根据以下事实信息生成一份课后反馈。严格基于事实，不编造任何未被点选或提及的信息。\n\n事实信息：\n${facts}`;
+  const userPrompt = `请根据以下事实信息生成一份课后反馈。严格基于事实，不编造任何未被点选或提及的信息。如果提供了上节课反馈，请参考其中的评价和进步点，使评价具有连贯性。\n\n事实信息：\n${facts}`;
 
   const response = await client.chat.completions.create({
     model: 'deepseek-chat',
     temperature: 0.7,
-    max_tokens: 800,
+    max_tokens: 1200,
     messages: [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt },
@@ -56,6 +157,5 @@ export async function previewStyle(stylePrompt: string, description: string): Pr
 
 // Placeholder for future audio analysis integration
 export async function analyzeAudio(_audioData: Buffer): Promise<string> {
-  // TODO: Future integration point for audio analysis
   throw new Error('Audio analysis not yet implemented');
 }

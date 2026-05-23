@@ -5,6 +5,7 @@ import { copyToClipboard, openWechat } from '../utils/clipboard';
 interface FeedbackItem {
   student_id: string;
   content: string;
+  student_name?: string;
 }
 
 export default function FeedbackResult() {
@@ -62,7 +63,7 @@ export default function FeedbackResult() {
         {feedbacks.map((f, i) => (
           <div key={i} className="card">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-primary-600">学生 #{i + 1}</span>
+              <span className="text-sm font-medium text-primary-600">{f.student_name || `学生 #${i + 1}`}</span>
               <div className="flex gap-2">
                 <button
                   onClick={() => sendToWechat(f.content)}

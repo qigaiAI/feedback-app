@@ -1,14 +1,15 @@
 import { NavLink, useLocation } from 'react-router-dom';
 
 const tabs = [
-  { to: '/students', label: '学生', icon: '👥' },
   { to: '/feedback/new', label: '写反馈', icon: '✏️' },
+  { to: '/students', label: '学生', icon: '👥' },
+  { to: '/templates', label: '模板', icon: '📋' },
   { to: '/settings', label: '设置', icon: '⚙️' },
 ];
 
 export default function Navbar() {
   const location = useLocation();
-  const hideNav = location.pathname === '/';
+  const hideNav = location.pathname === '/login';
 
   if (hideNav) return null;
 

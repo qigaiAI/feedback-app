@@ -49,7 +49,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
 
 router.post('/', async (req: AuthRequest, res: Response) => {
   try {
-    const { name, grade, notes, group_ids } = req.body;
+    const { name, grade, notes, group_ids, new_class_name } = req.body;
     if (!name) {
       return res.status(400).json({ error: '请填写学生姓名' });
     }
@@ -60,9 +60,19 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     );
     const student = result.rows[0];
 
+    // Auto-create class if new_class_name is provided
+    let allGroupIds = group_ids || [];
+    if (new_class_name && new_class_name.trim()) {
+      const classResult = await pool.query(
+        'INSERT INTO groups (teacher_id, name) VALUES ($1, $2) RETURNING id',
+        [req.userId, new_class_name.trim()]
+      );
+      allGroupIds = [...allGroupIds, classResult.rows[0].id];
+    }
+
     // Add to groups if specified
-    if (group_ids && group_ids.length > 0) {
-      for (const gid of group_ids) {
+    if (allGroupIds.length > 0) {
+      for (const gid of allGroupIds) {
         await pool.query(
           'INSERT INTO student_groups (student_id, group_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
           [student.id, gid]
@@ -102,7 +112,7 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
 
 router.put('/:id', async (req: AuthRequest, res: Response) => {
   try {
-    const { name, grade, notes, group_ids } = req.body;
+    const { name, grade, notes, group_ids, new_class_name } = req.body;
     const result = await pool.query(
       `UPDATE students SET name = COALESCE($1, name), grade = $2, notes = $3, updated_at = now()
        WHERE id = $4 AND teacher_id = $5 RETURNING *`,
@@ -112,10 +122,22 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: '学生不存在' });
     }
 
+    // Auto-create class if new_class_name is provided
+    let allGroupIds = group_ids || [];
+    if (new_class_name && new_class_name.trim()) {
+      const classResult = await pool.query(
+        'INSERT INTO groups (teacher_id, name) VALUES ($1, $2) RETURNING id',
+        [req.userId, new_class_name.trim()]
+      );
+      allGroupIds = [...allGroupIds, classResult.rows[0].id];
+    }
+
     // Update groups
-    if (group_ids !== undefined) {
-      await pool.query('DELETE FROM student_groups WHERE student_id = $1', [req.params.id]);
-      for (const gid of group_ids) {
+    if (group_ids !== undefined || new_class_name) {
+      if (group_ids !== undefined) {
+        await pool.query('DELETE FROM student_groups WHERE student_id = $1', [req.params.id]);
+      }
+      for (const gid of allGroupIds) {
         await pool.query(
           'INSERT INTO student_groups (student_id, group_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
           [req.params.id, gid]

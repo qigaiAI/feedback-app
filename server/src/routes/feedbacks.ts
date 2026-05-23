@@ -1,95 +1,120 @@
 import { Router, Response } from 'express';
 import pool from '../db';
 import { AuthRequest, authMiddleware } from '../middleware/auth';
-import { generateFeedback } from '../services/deepseek';
+import { generateFeedback, buildFeedbackFacts } from '../services/deepseek';
 
 const router = Router();
 router.use(authMiddleware);
 
 router.post('/generate', async (req: AuthRequest, res: Response) => {
   try {
-    const { students } = req.body;
+    const { students, template_id } = req.body;
     if (!students || !Array.isArray(students) || students.length === 0) {
       return res.status(400).json({ error: '请选择学生' });
     }
 
-    // Get teacher's style prompt
-    const userR = await pool.query('SELECT style_prompt, name FROM users WHERE id = $1', [req.userId]);
-    const stylePrompt = userR.rows[0]?.style_prompt || null;
+    // Get style prompt from template or user default
+    let stylePrompt: string | null = null;
+    if (template_id) {
+      const tRes = await pool.query(
+        'SELECT style_prompt FROM templates WHERE id = $1 AND teacher_id = $2',
+        [template_id, req.userId]
+      );
+      if (tRes.rows.length > 0) {
+        stylePrompt = tRes.rows[0].style_prompt;
+      }
+    }
+    if (!stylePrompt) {
+      // Try default template
+      const dRes = await pool.query(
+        'SELECT style_prompt FROM templates WHERE teacher_id = $1 AND is_default = true LIMIT 1',
+        [req.userId]
+      );
+      if (dRes.rows.length > 0) {
+        stylePrompt = dRes.rows[0].style_prompt;
+      }
+    }
+    if (!stylePrompt) {
+      // Fallback to user's saved style_prompt
+      const uRes = await pool.query('SELECT style_prompt FROM users WHERE id = $1', [req.userId]);
+      stylePrompt = uRes.rows[0]?.style_prompt || null;
+    }
 
     const results = [];
 
     for (const item of students) {
-      const { student_id, evaluations, behavior_tags, knowledge_tag_ids, extra_comment } = item;
+      const {
+        student_id,
+        evaluations,
+        behavior_tags,
+        knowledge_text,
+        extra_comment,
+        homework,
+        previous_feedback_id,
+        previous_feedback_text,
+      } = item;
 
-      // Build facts from evaluation data
-      const parts: string[] = [];
-
-      if (evaluations) {
-        if (evaluations.focus) {
-          parts.push(`专注度：${'★'.repeat(evaluations.focus)}${'☆'.repeat(5 - evaluations.focus)} (${evaluations.focus}/5)`);
-        }
-        if (evaluations.accuracy) {
-          parts.push(`正确率：${'★'.repeat(evaluations.accuracy)}${'☆'.repeat(5 - evaluations.accuracy)} (${evaluations.accuracy}/5)`);
-        }
-        if (evaluations.mastery) {
-          const masteryMap: Record<string, string> = {
-            'mastered': '已掌握',
-            'partial': '部分掌握',
-            'not_mastered': '未掌握',
-          };
-          parts.push(`掌握情况：${masteryMap[evaluations.mastery] || evaluations.mastery}`);
-        }
-      }
-
-      if (behavior_tags && behavior_tags.length > 0) {
-        const tagResult = await pool.query(
-          'SELECT name FROM behavior_tags WHERE name = ANY($1)',
-          [behavior_tags]
-        );
-        const names = tagResult.rows.map((r: any) => r.name);
-        if (names.length > 0) {
-          parts.push(`课堂表现：${names.join('、')}`);
-        }
-      }
-
-      if (knowledge_tag_ids && knowledge_tag_ids.length > 0) {
-        const ktResult = await pool.query(
-          'SELECT name FROM knowledge_tags WHERE id = ANY($1)',
-          [knowledge_tag_ids]
-        );
-        const names = ktResult.rows.map((r: any) => r.name);
-        if (names.length > 0) {
-          parts.push(`学习内容：${names.join('、')}`);
-        }
-      }
-
-      if (extra_comment) {
-        parts.push(`老师补充：${extra_comment}`);
-      }
-
-      const facts = parts.join('\n');
-      if (!facts) {
-        results.push({ student_id, content: '（未提供评价信息）' });
+      // Get student info
+      const sRes = await pool.query(
+        'SELECT name, grade, notes FROM students WHERE id = $1 AND teacher_id = $2',
+        [student_id, req.userId]
+      );
+      if (sRes.rows.length === 0) {
+        results.push({ student_id, content: '（学生不存在）' });
         continue;
       }
+      const student = sRes.rows[0];
+
+      // Resolve previous feedback text
+      let prevText = previous_feedback_text || null;
+      if (!prevText && previous_feedback_id) {
+        const pfRes = await pool.query(
+          'SELECT content FROM feedbacks WHERE id = $1 AND teacher_id = $2',
+          [previous_feedback_id, req.userId]
+        );
+        if (pfRes.rows.length > 0) {
+          prevText = pfRes.rows[0].content;
+        }
+      }
+
+      const facts = buildFeedbackFacts({
+        student: { name: student.name, grade: student.grade, notes: student.notes },
+        evaluations,
+        behavior_tags,
+        knowledge_text,
+        extra_comment,
+        homework,
+        previous_feedback_text: prevText,
+      });
 
       const content = await generateFeedback(stylePrompt, facts);
 
       // Save to database
+      const usedBehaviorTags = behavior_tags?.length > 0 ? behavior_tags : null;
+      const rawInput = {
+        evaluations,
+        behavior_tags: usedBehaviorTags,
+        knowledge_text: knowledge_text || null,
+        extra_comment: extra_comment || null,
+        homework: homework || null,
+      };
+
       await pool.query(
-        `INSERT INTO feedbacks (teacher_id, student_id, content, raw_input, used_tags)
-         VALUES ($1, $2, $3, $4, $5)`,
+        `INSERT INTO feedbacks (teacher_id, student_id, content, raw_input, homework, previous_feedback_id, knowledge_text, used_template_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
         [
           req.userId,
           student_id,
           content,
-          JSON.stringify({ evaluations, behavior_tags, extra_comment }),
-          knowledge_tag_ids || null,
+          JSON.stringify(rawInput),
+          homework || null,
+          previous_feedback_id || null,
+          knowledge_text || null,
+          template_id || null,
         ]
       );
 
-      results.push({ student_id, content });
+      results.push({ student_id, content, student_name: student.name });
     }
 
     res.json({ feedbacks: results });
@@ -164,6 +189,21 @@ router.get('/history', async (req: AuthRequest, res: Response) => {
   } catch (err) {
     console.error('History error:', err);
     res.status(500).json({ error: '获取历史反馈失败' });
+  }
+});
+
+router.get('/last/:studentId', async (req: AuthRequest, res: Response) => {
+  try {
+    const result = await pool.query(
+      `SELECT * FROM feedbacks
+       WHERE teacher_id = $1 AND student_id = $2 AND is_deleted = false
+       ORDER BY created_at DESC LIMIT 1`,
+      [req.userId, req.params.studentId]
+    );
+    res.json({ feedback: result.rows[0] || null });
+  } catch (err) {
+    console.error('Get last feedback error:', err);
+    res.status(500).json({ error: '获取上节课反馈失败' });
   }
 });
 

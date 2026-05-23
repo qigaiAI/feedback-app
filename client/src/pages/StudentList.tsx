@@ -19,6 +19,12 @@ interface Group {
   student_count: number;
 }
 
+const GRADE_OPTS = [
+  '一年级', '二年级', '三年级', '四年级', '五年级', '六年级',
+  '初一', '初二', '初三',
+  '高一', '高二', '高三',
+];
+
 export default function StudentList() {
   const [students, setStudents] = useState<Student[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
@@ -29,14 +35,11 @@ export default function StudentList() {
   const [showAdd, setShowAdd] = useState(false);
   const [newName, setNewName] = useState('');
   const [newGrade, setNewGrade] = useState('');
+  const [newGradeCustom, setNewGradeCustom] = useState('');
   const [newNotes, setNewNotes] = useState('');
+  const [newClassId, setNewClassId] = useState('');
+  const [newClassName, setNewClassName] = useState('');
   const [saving, setSaving] = useState(false);
-
-  const gradeOptions = [
-    '一年级', '二年级', '三年级', '四年级', '五年级', '六年级',
-    '初一', '初二', '初三',
-    '高一', '高二', '高三',
-  ];
 
   const fetchData = useCallback(async () => {
     try {
@@ -64,10 +67,20 @@ export default function StudentList() {
     if (!newName.trim()) return;
     setSaving(true);
     try {
-      await api.post('/api/students', { name: newName, grade: newGrade, notes: newNotes });
+      const grade = newGradeCustom || newGrade;
+      await api.post('/api/students', {
+        name: newName,
+        grade: grade || null,
+        notes: newNotes || null,
+        group_ids: newClassId ? [newClassId] : [],
+        new_class_name: newClassName || undefined,
+      });
       setNewName('');
       setNewGrade('');
+      setNewGradeCustom('');
       setNewNotes('');
+      setNewClassId('');
+      setNewClassName('');
       setShowAdd(false);
       fetchData();
     } catch {
@@ -101,14 +114,40 @@ export default function StudentList() {
       {showAdd && (
         <form onSubmit={addStudent} className="card mb-4 space-y-3">
           <input className="input" placeholder="姓名 *" value={newName} onChange={e => setNewName(e.target.value)} required />
-          <div className="flex gap-2">
-            <select className="input" value={newGrade} onChange={e => setNewGrade(e.target.value)}>
-              <option value="">选择年级</option>
-              {gradeOptions.map(g => <option key={g} value={g}>{g}</option>)}
-            </select>
-            <input className="input" placeholder="自定义年级" value={newGrade} onChange={e => setNewGrade(e.target.value)} />
+          <div>
+            <label className="label text-xs">年级</label>
+            <div className="flex gap-2">
+              <select className="input flex-1" value={newGrade} onChange={e => setNewGrade(e.target.value)}>
+                <option value="">选择年级</option>
+                {GRADE_OPTS.map(g => <option key={g} value={g}>{g}</option>)}
+              </select>
+              <input className="input flex-1" placeholder="或自定义年级" value={newGradeCustom} onChange={e => setNewGradeCustom(e.target.value)} />
+            </div>
           </div>
-          <input className="input" placeholder="备注（选填）" value={newNotes} onChange={e => setNewNotes(e.target.value)} />
+          <div>
+            <label className="label text-xs">班级</label>
+            <div className="flex gap-2">
+              <select className="input flex-1" value={newClassId} onChange={e => { setNewClassId(e.target.value); setNewClassName(''); }}>
+                <option value="">选择班级</option>
+                {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+              </select>
+              <input
+                className="input flex-1"
+                placeholder="或新建班级名称"
+                value={newClassName}
+                onChange={e => setNewClassName(e.target.value)}
+              />
+            </div>
+          </div>
+          <div>
+            <label className="label text-xs">AI 备注（AI 生成反馈时会参考此信息）</label>
+            <textarea
+              className="input min-h-[60px]"
+              placeholder="如：性格内向需多鼓励、口算弱注意力易分散..."
+              value={newNotes}
+              onChange={e => setNewNotes(e.target.value)}
+            />
+          </div>
           <button type="submit" className="btn-primary w-full" disabled={saving}>
             {saving ? '添加中...' : '确认添加'}
           </button>
@@ -127,7 +166,7 @@ export default function StudentList() {
           value={selectedGroup}
           onChange={e => { setSelectedGroup(e.target.value); setLoading(true); }}
         >
-          <option value="">全部分组</option>
+          <option value="">全部班级</option>
           {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
         </select>
       </div>
@@ -141,7 +180,7 @@ export default function StudentList() {
               <div className="font-medium">{s.name}</div>
               <div className="text-xs text-gray-500">
                 {s.grade && `${s.grade} · `}
-                {s.groups.map(g => g.name).join(', ') || '未分组'}
+                {s.groups.map(g => g.name).join(', ') || '未分班'}
                 {s.notes && ` · ${s.notes}`}
               </div>
             </Link>

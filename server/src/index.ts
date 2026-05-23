@@ -10,6 +10,7 @@ import groupRoutes from './routes/groups';
 import feedbackRoutes from './routes/feedbacks';
 import tagRoutes from './routes/tags';
 import templateRoutes from './routes/template';
+import templatesRoutes from './routes/templates';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -24,6 +25,7 @@ app.use('/api/groups', groupRoutes);
 app.use('/api/feedbacks', feedbackRoutes);
 app.use('/api/tags', tagRoutes);
 app.use('/api/template', templateRoutes);
+app.use('/api/templates', templatesRoutes);
 
 // Health check
 app.get('/api/health', (_req, res) => {
