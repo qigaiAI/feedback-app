@@ -51,11 +51,11 @@ export function buildFeedbackFacts(input: FeedbackInput): string {
   if (evaluations) {
     const evalLines: string[] = [];
 
-    if (evaluations.focus) {
-      evalLines.push(`- 专注度：${'★'.repeat(evaluations.focus)}${'☆'.repeat(5 - evaluations.focus)} (${evaluations.focus}/5)`);
+    if (evaluations.focus !== undefined && evaluations.focus > 0) {
+      evalLines.push(`- 专注度：${evaluations.focus}%`);
     }
-    if (evaluations.accuracy) {
-      evalLines.push(`- 正确率：${'★'.repeat(evaluations.accuracy)}${'☆'.repeat(5 - evaluations.accuracy)} (${evaluations.accuracy}/5)`);
+    if (evaluations.accuracy !== undefined && evaluations.accuracy > 0) {
+      evalLines.push(`- 正确率：${evaluations.accuracy}%`);
     }
 
     // Four new dimensions

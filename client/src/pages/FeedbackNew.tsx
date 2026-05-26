@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { api } from '../api/client';
-import StarRating from '../components/StarRating';
+import PercentSlider from '../components/PercentSlider';
 import Loading from '../components/Loading';
 
 interface Student {
@@ -541,13 +541,13 @@ export default function FeedbackNew() {
         {/* Focus */}
         <div className="card">
           <p className="label mb-1">专注度 <span className="text-gray-400 font-normal">（可选）</span></p>
-          <StarRating value={current.focus} onChange={v => updateEval(currentIdx, { focus: v })} />
+          <PercentSlider value={current.focus} onChange={v => updateEval(currentIdx, { focus: v })} />
         </div>
 
         {/* Accuracy */}
         <div className="card">
           <p className="label mb-1">正确率 <span className="text-gray-400 font-normal">（可选）</span></p>
-          <StarRating value={current.accuracy} onChange={v => updateEval(currentIdx, { accuracy: v })} />
+          <PercentSlider value={current.accuracy} onChange={v => updateEval(currentIdx, { accuracy: v })} />
         </div>
 
         {/* Extra comment */}
