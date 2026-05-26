@@ -6,6 +6,7 @@ interface User {
   email: string;
   name: string;
   role: string;
+  email_verified: boolean;
   membership_type: string;
   style_prompt: string | null;
   created_at: string;
