@@ -101,6 +101,10 @@ export default function Templates() {
     }
     resetWizard();
     setShowWizard(true);
+    // Auto-jump to paste mode if no feedbacks available
+    if (feedbacks.length === 0) {
+      setLearnMode('paste');
+    }
   };
 
   const openEdit = (t: Template) => {
@@ -221,6 +225,26 @@ export default function Templates() {
     setShowWizard(true);
   };
 
+  const adoptExample = async () => {
+    if (templates.length >= 3) {
+      alert('最多保存3个模板，请先删除一个');
+      return;
+    }
+    setSaving(true);
+    try {
+      await api.post('/api/templates', {
+        name: EXAMPLE_TEMPLATE.name,
+        style_prompt: EXAMPLE_TEMPLATE.style_prompt,
+        is_default: true,
+      });
+      await fetchTemplates();
+    } catch (err: any) {
+      alert(err.response?.data?.error || '保存失败');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const toggleFeedback = (id: string) => {
     setSelectedFeedbackIds(prev => {
       const next = new Set(prev);
@@ -253,8 +277,8 @@ export default function Templates() {
                 "小明同学今天表现非常棒！在分数加减法的练习中，你的专注度让老师印象深刻..."
               </div>
               <div className="flex gap-2">
-                <button onClick={useExample} className="btn-primary text-sm flex-1">使用此模板</button>
-                <button onClick={openNew} className="btn-secondary text-sm flex-1">自定义模板</button>
+                <button onClick={useExample} className="btn-secondary text-sm flex-1">查看示例模板</button>
+                <button onClick={adoptExample} className="btn-primary text-sm flex-1" disabled={saving}>{saving ? '保存中...' : '直接使用此模板'}</button>
               </div>
             </div>
           )}
@@ -424,29 +448,6 @@ export default function Templates() {
                   placeholder="输入 AI 风格指令..."
                 />
               </div>
-
-              {/* Quick preview button */}
-              <button
-                onClick={async () => {
-                  if (!stylePrompt) return;
-                  setPreviewing(true);
-                  try {
-                    const r = await api.post('/api/template/preview-style', {
-                      prompt: stylePrompt,
-                      test_description: MOCK_STUDENT,
-                    });
-                    setPreviewResult(r.data.preview);
-                  } catch { alert('预览失败'); }
-                  finally { setPreviewing(false); }
-                }}
-                className="btn-secondary w-full text-sm"
-                disabled={previewing || !stylePrompt}
-              >
-                {previewing ? '生成中...' : '按当前风格生成示例预览'}
-              </button>
-              {previewResult && (
-                <div className="bg-gray-50 rounded-lg p-3 text-sm whitespace-pre-wrap border">{previewResult}</div>
-              )}
 
               <div className="flex gap-2">
                 <button onClick={() => setStep(1)} className="btn-secondary flex-1">&larr; 上一步</button>

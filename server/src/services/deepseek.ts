@@ -16,7 +16,6 @@ interface StudentInfo {
 interface EvaluationData {
   focus?: number;
   accuracy?: number;
-  mastery?: string;
   participation?: { progress?: string; current?: string };
   thinking?: { progress?: string; current?: string };
   habits?: { progress?: string; current?: string };
@@ -57,9 +56,6 @@ export function buildFeedbackFacts(input: FeedbackInput): string {
     }
     if (evaluations.accuracy) {
       evalLines.push(`- 正确率：${'★'.repeat(evaluations.accuracy)}${'☆'.repeat(5 - evaluations.accuracy)} (${evaluations.accuracy}/5)`);
-    }
-    if (evaluations.mastery) {
-      evalLines.push(`- 掌握情况：${evaluations.mastery}`);
     }
 
     // Four new dimensions

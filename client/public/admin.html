@@ -8,7 +8,7 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, sans-serif; background: #f5f5f5; padding: 16px; }
 h1 { font-size: 20px; margin-bottom: 12px; }
-input, button { padding: 8px 12px; border-radius: 6px; border: 1px solid #ddd; font-size: 14px; }
+input, button, textarea { padding: 8px 12px; border-radius: 6px; border: 1px solid #ddd; font-size: 14px; }
 button { background: #4F46E5; color: #fff; border: none; cursor: pointer; }
 button:active { opacity: 0.8; }
 button.danger { background: #ef4444; }
@@ -22,19 +22,37 @@ tr:hover { background: #fafafa; }
 .badge-no { background: #fef3c7; color: #92400e; }
 .bar { display: flex; gap: 8px; margin-bottom: 16px; align-items: center; }
 #msg { font-size: 13px; margin: 8px 0; }
+.tabs { display: flex; gap: 0; margin-bottom: 16px; border-bottom: 2px solid #e5e7eb; }
+.tab { padding: 8px 16px; font-size: 14px; cursor: pointer; border: none; background: none; color: #6b7280; border-bottom: 2px solid transparent; margin-bottom: -2px; }
+.tab.active { color: #4F46E5; border-bottom-color: #4F46E5; }
+.msg-card { background: #fff; border-radius: 8px; padding: 12px; margin-bottom: 8px; }
+.msg-card .meta { font-size: 12px; color: #9ca3af; margin-bottom: 4px; }
+.msg-card .body { font-size: 14px; white-space: pre-wrap; }
 </style>
 </head>
 <body>
-<h1>账号管理</h1>
+<h1>管理后台</h1>
 <div class="bar">
   <input id="key" type="password" placeholder="Admin Key" style="width:160px">
-  <button onclick="load()">加载用户</button>
+  <button onclick="loadUsers()">加载</button>
 </div>
 <div id="msg"></div>
-<table id="table" style="display:none">
-<thead><tr><th>邮箱</th><th>昵称</th><th>验证</th><th>注册时间</th><th>操作</th></tr></thead>
-<tbody id="tbody"></tbody>
-</table>
+
+<div class="tabs">
+  <button class="tab active" onclick="switchTab('users')">用户管理</button>
+  <button class="tab" onclick="switchTab('messages')">用户留言</button>
+</div>
+
+<div id="tab-users">
+  <table id="table" style="display:none">
+  <thead><tr><th>邮箱</th><th>昵称</th><th>验证</th><th>注册时间</th><th>操作</th></tr></thead>
+  <tbody id="tbody"></tbody>
+  </table>
+</div>
+
+<div id="tab-messages" style="display:none">
+  <div id="msgList"></div>
+</div>
 
 <script>
 const API = '/api/admin';
@@ -44,7 +62,18 @@ function msg(text, color = '#333') {
   document.getElementById('msg').innerHTML = `<span style="color:${color}">${text}</span>`;
 }
 
-async function load() {
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach((t, i) => {
+    t.classList.toggle('active', (tab === 'users' && i === 0) || (tab === 'messages' && i === 1));
+  });
+  document.getElementById('tab-users').style.display = tab === 'users' ? '' : 'none';
+  document.getElementById('tab-messages').style.display = tab === 'messages' ? '' : 'none';
+  if (tab === 'messages') loadMessages();
+  if (tab === 'users') loadUsers();
+}
+
+// ---- Users ----
+async function loadUsers() {
   key = document.getElementById('key').value;
   if (!key) { msg('请输入 Admin Key', 'red'); return; }
   try {
@@ -79,7 +108,7 @@ async function verifyUser(id, verified) {
     const data = await r.json();
     if (data.error) { msg(data.error, 'red'); return; }
     msg('操作成功', 'green');
-    load();
+    loadUsers();
   } catch (e) { msg('网络错误', 'red'); }
 }
 
@@ -99,7 +128,29 @@ async function delUser(id, email) {
     const data = await r.json();
     if (data.error) { msg(data.error, 'red'); return; }
     msg('已删除', 'green');
-    load();
+    loadUsers();
+  } catch (e) { msg('网络错误', 'red'); }
+}
+
+// ---- Messages ----
+async function loadMessages() {
+  key = document.getElementById('key').value;
+  if (!key) { msg('请输入 Admin Key', 'red'); return; }
+  try {
+    const r = await fetch(`${API}/messages`, { headers: { 'X-Admin-Key': key } });
+    const data = await r.json();
+    if (data.error) { msg(data.error, 'red'); return; }
+    if (data.messages.length === 0) {
+      document.getElementById('msgList').innerHTML = '<p style="color:#9ca3af;text-align:center;padding:24px">暂无留言</p>';
+      return;
+    }
+    msg(`共 ${data.messages.length} 条留言`, '#333');
+    document.getElementById('msgList').innerHTML = data.messages.map(m => `
+      <div class="msg-card">
+        <div class="meta">${m.name} (${m.email}) · ${new Date(m.created_at).toLocaleString('zh-CN')}</div>
+        <div class="body">${m.content}</div>
+      </div>
+    `).join('');
   } catch (e) { msg('网络错误', 'red'); }
 }
 </script>

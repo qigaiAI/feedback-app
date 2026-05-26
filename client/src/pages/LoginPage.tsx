@@ -12,6 +12,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [sendingCode, setSendingCode] = useState(false);
@@ -45,6 +46,11 @@ export default function LoginPage() {
     setError('');
     setSubmitting(true);
     try {
+      if (mode === 'register' && password !== confirmPassword) {
+        setError('两次输入的密码不一致');
+        setSubmitting(false);
+        return;
+      }
       if (mode === 'login') {
         await login(email, password);
       } else if (mode === 'register') {
@@ -66,7 +72,7 @@ export default function LoginPage() {
   };
 
   const switchMode = (m: Mode) => {
-    setMode(m); setError(''); setCode(''); setCountdown(0);
+    setMode(m); setError(''); setCode(''); setCountdown(0); setConfirmPassword('');
   };
 
   return (
@@ -105,6 +111,13 @@ export default function LoginPage() {
           <label className="label">{mode === 'reset' ? '新密码' : '密码'}</label>
           <input type="password" className="input" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="请输入密码（至少6位）" required minLength={6} />
         </div>
+
+        {mode === 'register' && (
+          <div>
+            <label className="label">确认密码</label>
+            <input type="password" className="input" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="请再次输入密码" required minLength={6} />
+          </div>
+        )}
 
         {error && <div className="bg-red-50 text-red-600 text-sm rounded-lg px-4 py-3">{error}</div>}
 

@@ -49,6 +49,7 @@ export default function StudentList() {
   const [newClassId, setNewClassId] = useState('');
   const [newClassName, setNewClassName] = useState('');
   const [saving, setSaving] = useState(false);
+  const [collapsedGrades, setCollapsedGrades] = useState<Set<string>>(new Set());
 
   const fetchData = useCallback(async () => {
     try {
@@ -76,7 +77,7 @@ export default function StudentList() {
     if (!newName.trim()) return;
     setSaving(true);
     try {
-      const grade = newGradeCustom || newGrade;
+      const grade = newGrade === '__custom__' ? newGradeCustom : newGrade;
       await api.post('/api/students', {
         name: newName,
         grade: grade || null,
@@ -126,11 +127,21 @@ export default function StudentList() {
           <div>
             <label className="label text-xs">年级</label>
             <div className="flex gap-2">
-              <select className="input flex-1" value={newGrade} onChange={e => setNewGrade(e.target.value)}>
+              <select
+                className="input flex-1"
+                value={newGrade}
+                onChange={e => {
+                  setNewGrade(e.target.value);
+                  if (e.target.value !== '__custom__') setNewGradeCustom('');
+                }}
+              >
                 <option value="">选择年级</option>
                 {GRADE_OPTS.map(g => <option key={g} value={g}>{g}</option>)}
+                <option value="__custom__">自定义</option>
               </select>
-              <input className="input flex-1" placeholder="或自定义年级" value={newGradeCustom} onChange={e => setNewGradeCustom(e.target.value)} />
+              {newGrade === '__custom__' && (
+                <input className="input flex-1" placeholder="输入自定义年级" value={newGradeCustom} onChange={e => setNewGradeCustom(e.target.value)} />
+              )}
             </div>
           </div>
           <div>
@@ -142,7 +153,7 @@ export default function StudentList() {
               </select>
               <input
                 className="input flex-1"
-                placeholder="或新建班级名称"
+                placeholder="例：周六8-10班"
                 value={newClassName}
                 onChange={e => setNewClassName(e.target.value)}
               />
@@ -182,26 +193,72 @@ export default function StudentList() {
 
       {error && <ErrorMsg message={error} onRetry={fetchData} />}
 
-      <div className="space-y-2">
-        {students.map(s => (
-          <div key={s.id} className="card flex items-center justify-between">
-            <Link to={`/students/${s.id}`} className="flex-1">
-              <div className="font-medium">{s.name}</div>
-              <div className="text-xs text-gray-500">
-                {s.grade && `${s.grade} · `}
-                {s.groups.map(g => g.name).join(', ') || '未分班'}
-                {s.notes && ` · ${s.notes}`}
-              </div>
-            </Link>
-            <button
-              onClick={() => deleteStudent(s.id, s.name)}
-              className="text-red-400 text-sm px-3 py-1"
-              style={{ minHeight: 44 }}
-            >
-              删除
-            </button>
-          </div>
-        ))}
+      <div className="space-y-3">
+        {(() => {
+          // Group students by grade
+          const grouped: Record<string, Student[]> = {};
+          students.forEach(s => {
+            const grade = s.grade || '未设置年级';
+            if (!grouped[grade]) grouped[grade] = [];
+            grouped[grade].push(s);
+          });
+          // Sort keys: standard grades first, then custom
+          const stdOrder = GRADE_OPTS;
+          const sortedKeys = Object.keys(grouped).sort((a, b) => {
+            if (a === '未设置年级') return 1;
+            if (b === '未设置年级') return -1;
+            const ia = stdOrder.indexOf(a);
+            const ib = stdOrder.indexOf(b);
+            if (ia !== -1 && ib !== -1) return ia - ib;
+            if (ia !== -1) return -1;
+            if (ib !== -1) return 1;
+            return a.localeCompare(b, 'zh');
+          });
+
+          const toggleCollapse = (grade: string) => {
+            setCollapsedGrades(prev => {
+              const next = new Set(prev);
+              if (next.has(grade)) next.delete(grade);
+              else next.add(grade);
+              return next;
+            });
+          };
+
+          return sortedKeys.map(grade => (
+            <div key={grade}>
+              <button
+                onClick={() => toggleCollapse(grade)}
+                className="flex items-center gap-2 w-full text-left py-1.5 px-1"
+              >
+                <span className="text-xs text-gray-400">{collapsedGrades.has(grade) ? '▶' : '▼'}</span>
+                <span className="text-sm font-semibold text-gray-700">{grade}</span>
+                <span className="text-xs text-gray-400">({grouped[grade].length})</span>
+              </button>
+              {!collapsedGrades.has(grade) && (
+                <div className="space-y-2">
+                  {grouped[grade].map(s => (
+                    <div key={s.id} className="card flex items-center justify-between ml-4">
+                      <Link to={`/students/${s.id}`} className="flex-1">
+                        <div className="font-medium">{s.name}</div>
+                        <div className="text-xs text-gray-500">
+                          {s.groups.map(g => g.name).join(', ') || '未分班'}
+                          {s.notes && ` · ${s.notes}`}
+                        </div>
+                      </Link>
+                      <button
+                        onClick={() => deleteStudent(s.id, s.name)}
+                        className="text-red-400 text-sm px-3 py-1"
+                        style={{ minHeight: 44 }}
+                      >
+                        删除
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ));
+        })()}
         {students.length === 0 && !error && (
           <p className="text-center text-gray-400 py-8">暂无学生，点击上方按钮添加</p>
         )}

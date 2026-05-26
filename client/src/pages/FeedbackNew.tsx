@@ -43,7 +43,6 @@ interface StudentEval {
   student_notes: string | null;
   focus?: number;
   accuracy?: number;
-  mastery?: string;
   participation: DimensionEval;
   thinking: DimensionEval;
   habits: DimensionEval;
@@ -58,10 +57,8 @@ interface StudentEval {
   lastFeedbackLoading: boolean;
 }
 
-const PROGRESS_OPTS = ['有进步', '进步很大', '状态保持', '没有进步', '有所退步', '退步比较明显'];
+const PROGRESS_OPTS = ['有进步', '进步很大', '状态保持', '有所退步', '退步比较明显'];
 const CURRENT_OPTS = ['还需提高', '基本达标', '还不错', '非常好', '表现卓越'];
-const MASTERY_OPTS = ['完全掌握', '基本掌握', '部分掌握', '需重新讲解'];
-
 export default function FeedbackNew() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -219,6 +216,13 @@ export default function FeedbackNew() {
   };
 
   const generate = async () => {
+    // Validate required fields
+    const emptyKnowledge = evals.findIndex(e => !e.knowledge_text.trim());
+    if (emptyKnowledge !== -1) {
+      setCurrentIdx(emptyKnowledge);
+      alert(`请填写"${evals[emptyKnowledge].student_name}"的本节课学习内容`);
+      return;
+    }
     setPhase('generating');
     try {
       // Clean evals before sending
@@ -227,7 +231,6 @@ export default function FeedbackNew() {
         evaluations: {
           focus: e.focus,
           accuracy: e.accuracy,
-          mastery: e.mastery,
           participation: e.participation?.progress || e.participation?.current ? e.participation : undefined,
           thinking: e.thinking?.progress || e.thinking?.current ? e.thinking : undefined,
           habits: e.habits?.progress || e.habits?.current ? e.habits : undefined,
@@ -378,9 +381,9 @@ export default function FeedbackNew() {
       </div>
 
       {/* Template selector */}
-      {templates.length > 0 && (
-        <div className="card mb-4">
-          <p className="label mb-1">选择模板</p>
+      <div className="card mb-4">
+        <p className="label mb-1">选择模板</p>
+        {templates.length > 0 ? (
           <select
             className="input text-sm"
             value={selectedTemplateId}
@@ -393,8 +396,13 @@ export default function FeedbackNew() {
               </option>
             ))}
           </select>
-        </div>
-      )}
+        ) : (
+          <p className="text-xs text-gray-400">
+            暂无自定义模板，使用系统内置示例模板。
+            <a href="/templates" className="text-primary-600 ml-1" onClick={(e) => { e.preventDefault(); navigate('/templates'); }}>去制作模板 &rarr;</a>
+          </p>
+        )}
+      </div>
 
       {/* Previous feedback reference */}
       <div className="card mb-4 bg-amber-50 border-amber-200">
@@ -428,37 +436,17 @@ export default function FeedbackNew() {
           <StarRating value={current.accuracy} onChange={v => updateEval(currentIdx, { accuracy: v })} />
         </div>
 
-        {/* Mastery */}
-        <div className="card">
-          <p className="label mb-1">掌握情况 <span className="text-gray-400 font-normal">（可选）</span></p>
-          <div className="flex flex-wrap gap-2">
-            {MASTERY_OPTS.map(opt => (
-              <button
-                key={opt}
-                onClick={() => updateEval(currentIdx, { mastery: current.mastery === opt ? undefined : opt })}
-                className={`text-sm px-3 py-1.5 rounded-full border ${
-                  current.mastery === opt
-                    ? 'bg-primary-600 text-white border-primary-600'
-                    : 'bg-white border-gray-200 text-gray-600'
-                }`}
-              >
-                {opt}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Four new dimensions */}
+        {/* Four dimensions */}
         {([
-          { key: 'participation', label: '参与互动度' },
-          { key: 'thinking', label: '思维与反应质量' },
-          { key: 'habits', label: '学习习惯' },
-          { key: 'knowledge_depth', label: '知识掌握程度' },
+          { key: 'participation', label: '参与互动度', rec: false },
+          { key: 'thinking', label: '思维与反应质量', rec: true },
+          { key: 'habits', label: '学习习惯', rec: false },
+          { key: 'knowledge_depth', label: '知识掌握程度', rec: true },
         ] as const).map(dim => {
           const val = (current as any)[dim.key] as DimensionEval;
           return (
             <div key={dim.key} className="card">
-              <p className="label mb-2">{dim.label} <span className="text-gray-400 font-normal">（可选）</span></p>
+              <p className="label mb-2">{dim.label} <span className="text-gray-400 font-normal">{dim.rec ? '（推荐）' : '（可选）'}</span></p>
 
               {/* Progress eval */}
               <p className="text-xs text-gray-500 mb-1">进步评价（相对于上节课）</p>
@@ -523,10 +511,10 @@ export default function FeedbackNew() {
           </div>
         </div>
 
-        {/* Knowledge text (free form) */}
+        {/* Knowledge text (required) */}
         <div className="card">
           <div className="flex items-center justify-between mb-1">
-            <p className="label">本节课学习内容</p>
+            <p className="label"><span className="text-red-500">*</span> 本节课学习内容</p>
             {currentIdx > 0 && (
               <label className="flex items-center gap-1 text-xs text-gray-400">
                 <input
@@ -549,10 +537,10 @@ export default function FeedbackNew() {
 
         {/* Homework */}
         <div className="card">
-          <p className="label mb-1">课后作业</p>
+          <p className="label mb-1">课后作业 <span className="text-gray-400 font-normal">（推荐）</span></p>
           <input
             className="input"
-            placeholder="如：练习册第10页1-3题（可选）"
+            placeholder="如：练习册第10页1-3题"
             value={current.homework}
             onChange={e => updateEval(currentIdx, { homework: e.target.value })}
           />

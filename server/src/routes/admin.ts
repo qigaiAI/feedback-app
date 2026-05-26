@@ -73,4 +73,21 @@ router.get('/users/:id/code', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// List messages
+router.get('/messages', async (req: AuthRequest, res: Response) => {
+  try {
+    const result = await pool.query(
+      `SELECT m.id, m.content, m.created_at, u.email, u.name
+       FROM messages m
+       JOIN users u ON m.user_id = u.id
+       ORDER BY m.created_at DESC
+       LIMIT 100`
+    );
+    res.json({ messages: result.rows });
+  } catch (err) {
+    console.error('Admin list messages error:', err);
+    res.status(500).json({ error: 'Failed to list messages' });
+  }
+});
+
 export default router;

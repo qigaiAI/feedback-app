@@ -13,6 +13,7 @@ import tagRoutes from './routes/tags';
 import templateRoutes from './routes/template';
 import templatesRoutes from './routes/templates';
 import adminRoutes from './routes/admin';
+import messageRoutes from './routes/messages';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -30,6 +31,7 @@ app.use('/api/tags', tagRoutes);
 app.use('/api/template', templateRoutes);
 app.use('/api/templates', templatesRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/messages', messageRoutes);
 
 // Health check
 app.get('/api/health', (_req, res) => {

@@ -18,8 +18,12 @@ export default function Settings() {
       </div>
 
       <div className="mb-4">
-        <h3 className="font-medium text-sm mb-3">行为标签管理</h3>
+        <h3 className="font-medium text-sm mb-3">课堂表现标签</h3>
         <BehaviorTab />
+      </div>
+
+      <div className="border-t pt-4 mb-4">
+        <FeedbackForm />
       </div>
 
       <div className="border-t pt-4">
@@ -27,6 +31,51 @@ export default function Settings() {
           风格模板请前往「模板」页面管理。知识内容已改为写反馈时自由填写。
         </p>
       </div>
+    </div>
+  );
+}
+
+function FeedbackForm() {
+  const [content, setContent] = useState('');
+  const [submitted, setSubmitted] = useState(false);
+  const [sending, setSending] = useState(false);
+
+  const submit = async () => {
+    if (!content.trim()) return;
+    setSending(true);
+    try {
+      await api.post('/api/messages', { content: content.trim() });
+      setSubmitted(true);
+      setContent('');
+    } catch { alert('提交失败'); }
+    finally { setSending(false); }
+  };
+
+  if (submitted) {
+    return (
+      <div className="text-sm text-green-600 text-center py-2">
+        感谢您的反馈！我们会认真阅读每一条留言。
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <h3 className="font-medium text-sm mb-2">留言给作者</h3>
+      <p className="text-xs text-gray-400 mb-2">您对产品的改进意见、功能需求或 bug 反馈，欢迎告诉我们。</p>
+      <textarea
+        className="input min-h-[100px]"
+        placeholder="请写下您的想法..."
+        value={content}
+        onChange={e => setContent(e.target.value)}
+      />
+      <button
+        onClick={submit}
+        className="btn-primary w-full mt-2"
+        disabled={sending || !content.trim()}
+      >
+        {sending ? '提交中...' : '提交'}
+      </button>
     </div>
   );
 }

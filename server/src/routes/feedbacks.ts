@@ -114,6 +114,17 @@ router.post('/generate', async (req: AuthRequest, res: Response) => {
         ]
       );
 
+      // Cleanup: keep only latest 10 feedbacks per student
+      await pool.query(
+        `DELETE FROM feedbacks WHERE id IN (
+          SELECT id FROM feedbacks
+          WHERE teacher_id = $1 AND student_id = $2 AND is_deleted = false
+          ORDER BY created_at DESC
+          OFFSET 10
+        )`,
+        [req.userId, student_id]
+      );
+
       results.push({ student_id, content, student_name: student.name });
     }
 
@@ -204,6 +215,22 @@ router.get('/last/:studentId', async (req: AuthRequest, res: Response) => {
   } catch (err) {
     console.error('Get last feedback error:', err);
     res.status(500).json({ error: '获取上节课反馈失败' });
+  }
+});
+
+router.delete('/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const result = await pool.query(
+      'UPDATE feedbacks SET is_deleted = true WHERE id = $1 AND teacher_id = $2 RETURNING id',
+      [req.params.id, req.userId]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: '反馈不存在' });
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Delete feedback error:', err);
+    res.status(500).json({ error: '删除失败' });
   }
 });
 

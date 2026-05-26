@@ -7,7 +7,7 @@ router.use(authMiddleware);
 
 router.get('/', async (req: AuthRequest, res: Response) => {
   try {
-    let result = await pool.query(
+    const result = await pool.query(
       `SELECT g.*, COUNT(sg.student_id)::int AS student_count
        FROM groups g
        LEFT JOIN student_groups sg ON g.id = sg.group_id
@@ -16,24 +16,6 @@ router.get('/', async (req: AuthRequest, res: Response) => {
        ORDER BY g.created_at DESC`,
       [req.userId]
     );
-
-    // Auto-create default class if user has none
-    if (result.rows.length === 0) {
-      const defaultName = `周六 8:00-10:00 班级`;
-      await pool.query(
-        'INSERT INTO groups (teacher_id, name) VALUES ($1, $2)',
-        [req.userId, defaultName]
-      );
-      result = await pool.query(
-        `SELECT g.*, COUNT(sg.student_id)::int AS student_count
-         FROM groups g
-         LEFT JOIN student_groups sg ON g.id = sg.group_id
-         WHERE g.teacher_id = $1
-         GROUP BY g.id
-         ORDER BY g.created_at DESC`,
-        [req.userId]
-      );
-    }
 
     res.json({ groups: result.rows });
   } catch (err) {

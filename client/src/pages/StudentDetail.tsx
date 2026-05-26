@@ -123,7 +123,7 @@ export default function StudentDetail() {
             </div>
             <input
               className="input"
-              placeholder="或输入新班级名称新建"
+              placeholder="例：周六8-10班"
               value={editNewClassName}
               onChange={e => setEditNewClassName(e.target.value)}
             />
@@ -173,11 +173,23 @@ export default function StudentDetail() {
       <h3 className="font-bold mb-3">历史反馈</h3>
       <div className="space-y-3">
         {feedbacks.map(f => (
-          <div key={f.id} className="card">
+          <div key={f.id} className="card relative">
             <p className="text-xs text-gray-400 mb-1">
               {new Date(f.created_at).toLocaleString('zh-CN')}
             </p>
             <p className="text-sm whitespace-pre-wrap">{f.content}</p>
+            <button
+              onClick={async () => {
+                if (!confirm('确定删除这条反馈？')) return;
+                try {
+                  await api.delete(`/api/feedbacks/${f.id}`);
+                  setFeedbacks(prev => prev.filter(x => x.id !== f.id));
+                } catch { alert('删除失败'); }
+              }}
+              className="absolute top-3 right-3 text-xs text-red-400 px-2 py-1"
+            >
+              删除
+            </button>
           </div>
         ))}
         {feedbacks.length === 0 && (
