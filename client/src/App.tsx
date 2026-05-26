@@ -20,6 +20,10 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 export default function App() {
   return (
     <div className="max-w-lg mx-auto min-h-screen pb-16">
+      {/* 测试版标识 */}
+      <div className="bg-orange-500 text-white text-center text-xs font-bold py-1.5 tracking-wide">
+        ⚠ 测试版 — 数据不与正式版互通
+      </div>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/" element={<ProtectedRoute><FeedbackNew /></ProtectedRoute>} />
