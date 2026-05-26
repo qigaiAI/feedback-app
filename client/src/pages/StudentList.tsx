@@ -48,6 +48,9 @@ export default function StudentList() {
   const [newNotes, setNewNotes] = useState('');
   const [newClassId, setNewClassId] = useState('');
   const [newClassName, setNewClassName] = useState('');
+  const [showQuickClass, setShowQuickClass] = useState(false);
+  const [quickClassName, setQuickClassName] = useState('');
+  const [creatingClass, setCreatingClass] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const fetchData = useCallback(async () => {
@@ -99,6 +102,22 @@ export default function StudentList() {
     }
   };
 
+  const quickCreateClass = async () => {
+    if (!quickClassName.trim()) return;
+    setCreatingClass(true);
+    try {
+      const res = await api.post('/api/groups', { name: quickClassName.trim() });
+      setQuickClassName('');
+      setShowQuickClass(false);
+      setNewClassId(res.data.group.id);
+      fetchData();
+    } catch {
+      alert('创建班级失败');
+    } finally {
+      setCreatingClass(false);
+    }
+  };
+
   const deleteStudent = async (id: string, name: string) => {
     if (!confirm(`确定删除 ${name}？历史反馈不会删除。`)) return;
     try {
@@ -135,18 +154,52 @@ export default function StudentList() {
           </div>
           <div>
             <label className="label text-xs">班级</label>
-            <div className="flex gap-2">
-              <select className="input flex-1" value={newClassId} onChange={e => { setNewClassId(e.target.value); setNewClassName(''); }}>
-                <option value="">选择班级</option>
-                {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
-              </select>
-              <input
-                className="input flex-1"
-                placeholder="或新建班级名称"
-                value={newClassName}
-                onChange={e => setNewClassName(e.target.value)}
-              />
-            </div>
+            {groups.length === 0 && !showQuickClass ? (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                <p className="text-xs text-amber-700 mb-2">还没有班级，请先新建班级</p>
+                <button type="button" onClick={() => setShowQuickClass(true)} className="btn-primary text-xs">
+                  + 新建班级
+                </button>
+              </div>
+            ) : (
+              <>
+                {showQuickClass && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-2">
+                    <p className="text-xs text-blue-700 mb-2">新建班级</p>
+                    <div className="flex gap-2">
+                      <input
+                        className="input flex-1 text-sm"
+                        placeholder="输入班级名称"
+                        value={quickClassName}
+                        onChange={e => setQuickClassName(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); quickCreateClass(); } }}
+                      />
+                      <button type="button" onClick={quickCreateClass} className="btn-primary text-xs" disabled={creatingClass}>
+                        {creatingClass ? '创建中...' : '创建'}
+                      </button>
+                      <button type="button" onClick={() => setShowQuickClass(false)} className="btn-secondary text-xs">取消</button>
+                    </div>
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <select
+                    className="input flex-1"
+                    value={newClassId}
+                    onChange={e => { setNewClassId(e.target.value); setNewClassName(''); }}
+                  >
+                    <option value="">
+                      {groups.length === 0 ? '还没有班级，请先新建班级' : '选择班级'}
+                    </option>
+                    {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                  </select>
+                  {!showQuickClass && (
+                    <button type="button" onClick={() => setShowQuickClass(true)} className="btn-secondary text-xs whitespace-nowrap">
+                      + 新建班级
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
           </div>
           <div>
             <label className="label text-xs">AI 备注（AI 生成反馈时会参考此信息）</label>

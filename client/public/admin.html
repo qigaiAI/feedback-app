@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>账号管理</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, sans-serif; background: #f5f5f5; padding: 16px; }
+h1 { font-size: 20px; margin-bottom: 12px; }
+input, button { padding: 8px 12px; border-radius: 6px; border: 1px solid #ddd; font-size: 14px; }
+button { background: #4F46E5; color: #fff; border: none; cursor: pointer; }
+button:active { opacity: 0.8; }
+button.danger { background: #ef4444; }
+button.small { padding: 4px 10px; font-size: 12px; }
+table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 8px; overflow: hidden; }
+th, td { padding: 10px 12px; text-align: left; font-size: 13px; border-bottom: 1px solid #f0f0f0; }
+th { background: #fafafa; font-weight: 600; }
+tr:hover { background: #fafafa; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; }
+.badge-ok { background: #dcfce7; color: #166534; }
+.badge-no { background: #fef3c7; color: #92400e; }
+.bar { display: flex; gap: 8px; margin-bottom: 16px; align-items: center; }
+#msg { font-size: 13px; margin: 8px 0; }
+</style>
+</head>
+<body>
+<h1>账号管理</h1>
+<div class="bar">
+  <input id="key" type="password" placeholder="Admin Key" style="width:160px">
+  <button onclick="load()">加载用户</button>
+</div>
+<div id="msg"></div>
+<table id="table" style="display:none">
+<thead><tr><th>邮箱</th><th>昵称</th><th>验证</th><th>注册时间</th><th>操作</th></tr></thead>
+<tbody id="tbody"></tbody>
+</table>
+
+<script>
+const API = '/api/admin';
+let key = '';
+
+function msg(text, color = '#333') {
+  document.getElementById('msg').innerHTML = `<span style="color:${color}">${text}</span>`;
+}
+
+async function load() {
+  key = document.getElementById('key').value;
+  if (!key) { msg('请输入 Admin Key', 'red'); return; }
+  try {
+    const r = await fetch(`${API}/users`, { headers: { 'X-Admin-Key': key } });
+    const data = await r.json();
+    if (data.error) { msg(data.error, 'red'); return; }
+    msg(`共 ${data.users.length} 个用户`, '#333');
+    document.getElementById('table').style.display = '';
+    document.getElementById('tbody').innerHTML = data.users.map(u => `
+      <tr>
+        <td>${u.email}</td>
+        <td>${u.name}</td>
+        <td><span class="badge ${u.email_verified ? 'badge-ok' : 'badge-no'}">${u.email_verified ? '已验证' : '未验证'}</span></td>
+        <td>${new Date(u.created_at).toLocaleString('zh-CN')}</td>
+        <td style="display:flex;gap:4px;flex-wrap:wrap">
+          ${u.email_verified ? '' : `<button class="small" onclick="verifyUser('${u.id}',true)">验证</button>`}
+          <button class="small" onclick="showCode('${u.id}')">验证码</button>
+          <button class="small danger" onclick="delUser('${u.id}','${u.email}')">删除</button>
+        </td>
+      </tr>
+    `).join('');
+  } catch (e) { msg('网络错误', 'red'); }
+}
+
+async function verifyUser(id, verified) {
+  if (!confirm(`确认${verified ? '手动验证' : '取消验证'}？`)) return;
+  try {
+    const r = await fetch(`${API}/users/${id}/verify`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-Admin-Key': key },
+      body: JSON.stringify({ verified })
+    });
+    const data = await r.json();
+    if (data.error) { msg(data.error, 'red'); return; }
+    msg('操作成功', 'green');
+    load();
+  } catch (e) { msg('网络错误', 'red'); }
+}
+
+async function showCode(id) {
+  try {
+    const r = await fetch(`${API}/users/${id}/code`, { headers: { 'X-Admin-Key': key } });
+    const data = await r.json();
+    if (data.error) { msg(data.error, 'red'); return; }
+    msg(`验证码: <b>${data.verification_token || '无'}</b> (过期: ${data.verification_token_expires ? new Date(data.verification_token_expires).toLocaleString('zh-CN') : '无'})`, 'green');
+  } catch (e) { msg('网络错误', 'red'); }
+}
+
+async function delUser(id, email) {
+  if (!confirm(`确定删除 ${email}？`)) return;
+  try {
+    const r = await fetch(`${API}/users/${id}`, { method: 'DELETE', headers: { 'X-Admin-Key': key } });
+    const data = await r.json();
+    if (data.error) { msg(data.error, 'red'); return; }
+    msg('已删除', 'green');
+    load();
+  } catch (e) { msg('网络错误', 'red'); }
+}
+</script>
+</body>
+</html>

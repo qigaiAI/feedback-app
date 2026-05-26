@@ -1,9 +1,10 @@
 import { Router, Response } from 'express';
 import pool from '../db';
-import { AuthRequest, authMiddleware } from '../middleware/auth';
+import { AuthRequest, authMiddleware, requireVerified } from '../middleware/auth';
 
 const router = Router();
 router.use(authMiddleware);
+router.use(requireVerified);
 
 // Knowledge tags - tree structure
 router.get('/knowledge', async (req: AuthRequest, res: Response) => {
