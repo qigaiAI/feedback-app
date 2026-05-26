@@ -112,10 +112,6 @@ export default function FeedbackNew() {
         setTemplates(tRes.data.templates);
         const def = tRes.data.templates.find((t: Template) => t.is_default);
         if (def) setSelectedTemplateId(def.id);
-        // Auto-select first class
-        if (gRes.data.groups.length > 0 && !prefilledStudentId) {
-          setSelectedClassId(gRes.data.groups[0].id);
-        }
         if (prefilledStudentId) {
           setSelectedIds(new Set([prefilledStudentId]));
           // Find which class this student belongs to
@@ -326,8 +322,16 @@ export default function FeedbackNew() {
           {selectedClassId && filteredStudents.length === 0 && (
             <p className="text-center text-gray-400 py-8 text-sm">该班级暂无学生</p>
           )}
-          {!selectedClassId && (
+          {!selectedClassId && groups.length > 0 && (
             <p className="text-center text-gray-400 py-8 text-sm">请选择一个班级</p>
+          )}
+          {groups.length === 0 && (
+            <div className="text-center py-8">
+              <p className="text-gray-400 text-sm mb-2">还没有班级</p>
+              <a href="/students" className="text-primary-600 text-sm" onClick={(e) => { e.preventDefault(); navigate('/students'); }}>
+                去学生管理创建班级 &rarr;
+              </a>
+            </div>
           )}
         </div>
 
@@ -424,24 +428,47 @@ export default function FeedbackNew() {
       </div>
 
       <div className="space-y-4">
-        {/* Focus */}
+        {/* Knowledge text (required) — moved to top */}
         <div className="card">
-          <p className="label mb-1">专注度 <span className="text-gray-400 font-normal">（可选）</span></p>
-          <StarRating value={current.focus} onChange={v => updateEval(currentIdx, { focus: v })} />
+          <div className="flex items-center justify-between mb-1">
+            <p className="label"><span className="text-red-500">*</span> 本节课学习内容</p>
+            {currentIdx > 0 && (
+              <label className="flex items-center gap-1 text-xs text-gray-400">
+                <input
+                  type="checkbox"
+                  checked={inheritContent}
+                  onChange={e => setInheritContent(e.target.checked)}
+                  className="w-3.5 h-3.5"
+                />
+                沿用上一位学生
+              </label>
+            )}
+          </div>
+          <textarea
+            className="input min-h-[70px]"
+            placeholder="直接输入本节课所学内容，如：分数乘法、约分、应用题..."
+            value={current.knowledge_text}
+            onChange={e => updateEval(currentIdx, { knowledge_text: e.target.value })}
+          />
         </div>
 
-        {/* Accuracy */}
+        {/* Homework — 推荐 */}
         <div className="card">
-          <p className="label mb-1">正确率 <span className="text-gray-400 font-normal">（可选）</span></p>
-          <StarRating value={current.accuracy} onChange={v => updateEval(currentIdx, { accuracy: v })} />
+          <p className="label mb-1">课后作业 <span className="text-gray-400 font-normal">（推荐）</span></p>
+          <input
+            className="input"
+            placeholder="如：练习册第10页1-3题"
+            value={current.homework}
+            onChange={e => updateEval(currentIdx, { homework: e.target.value })}
+          />
         </div>
 
-        {/* Four dimensions */}
+        {/* Four dimensions — 推荐标签放前面 */}
         {([
-          { key: 'participation', label: '参与互动度', rec: false },
           { key: 'thinking', label: '思维与反应质量', rec: true },
-          { key: 'habits', label: '学习习惯', rec: false },
           { key: 'knowledge_depth', label: '知识掌握程度', rec: true },
+          { key: 'participation', label: '参与互动度', rec: false },
+          { key: 'habits', label: '学习习惯', rec: false },
         ] as const).map(dim => {
           const val = (current as any)[dim.key] as DimensionEval;
           return (
@@ -511,39 +538,16 @@ export default function FeedbackNew() {
           </div>
         </div>
 
-        {/* Knowledge text (required) */}
+        {/* Focus */}
         <div className="card">
-          <div className="flex items-center justify-between mb-1">
-            <p className="label"><span className="text-red-500">*</span> 本节课学习内容</p>
-            {currentIdx > 0 && (
-              <label className="flex items-center gap-1 text-xs text-gray-400">
-                <input
-                  type="checkbox"
-                  checked={inheritContent}
-                  onChange={e => setInheritContent(e.target.checked)}
-                  className="w-3.5 h-3.5"
-                />
-                沿用上一位学生
-              </label>
-            )}
-          </div>
-          <textarea
-            className="input min-h-[70px]"
-            placeholder="直接输入本节课所学内容，如：分数乘法、约分、应用题..."
-            value={current.knowledge_text}
-            onChange={e => updateEval(currentIdx, { knowledge_text: e.target.value })}
-          />
+          <p className="label mb-1">专注度 <span className="text-gray-400 font-normal">（可选）</span></p>
+          <StarRating value={current.focus} onChange={v => updateEval(currentIdx, { focus: v })} />
         </div>
 
-        {/* Homework */}
+        {/* Accuracy */}
         <div className="card">
-          <p className="label mb-1">课后作业 <span className="text-gray-400 font-normal">（推荐）</span></p>
-          <input
-            className="input"
-            placeholder="如：练习册第10页1-3题"
-            value={current.homework}
-            onChange={e => updateEval(currentIdx, { homework: e.target.value })}
-          />
+          <p className="label mb-1">正确率 <span className="text-gray-400 font-normal">（可选）</span></p>
+          <StarRating value={current.accuracy} onChange={v => updateEval(currentIdx, { accuracy: v })} />
         </div>
 
         {/* Extra comment */}
