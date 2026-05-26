@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate, useSearchParams, useLocation, Link } from 'react-router-dom';
+import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { api } from '../api/client';
+import StarRating from '../components/StarRating';
 import Loading from '../components/Loading';
 
 interface Student {
@@ -42,7 +43,6 @@ interface StudentEval {
   student_notes: string | null;
   focus?: number;
   accuracy?: number;
-  showPercentages?: boolean;
   mastery?: string;
   participation: DimensionEval;
   thinking: DimensionEval;
@@ -186,9 +186,6 @@ export default function FeedbackNew() {
           student_name: s.name,
           student_grade: s.grade,
           student_notes: s.notes,
-          focus: 80,
-          accuracy: 80,
-          showPercentages: false,
           behavior_tags: [],
           knowledge_text: '',
           extra_comment: '',
@@ -230,7 +227,6 @@ export default function FeedbackNew() {
         evaluations: {
           focus: e.focus,
           accuracy: e.accuracy,
-          show_percentages: e.showPercentages || false,
           mastery: e.mastery,
           participation: e.participation?.progress || e.participation?.current ? e.participation : undefined,
           thinking: e.thinking?.progress || e.thinking?.current ? e.thinking : undefined,
@@ -266,118 +262,26 @@ export default function FeedbackNew() {
 
   // ---- Phase: Select Students ----
   if (phase === 'select') {
-    const today = new Date();
-    const dateStr = `${today.getFullYear()}年${today.getMonth() + 1}月${today.getDate()}日`;
-    const weekDay = ['日', '一', '二', '三', '四', '五', '六'][today.getDay()];
-    const encouragements = [
-      '今天也要为孩子们写出温暖的反馈哦',
-      '每一份反馈都是孩子成长的见证',
-      '用心记录，用爱陪伴每一位学生',
-      '好的反馈让家长更了解孩子的进步',
-    ];
-    const encouragement = encouragements[today.getDay() % encouragements.length];
-
-    // Empty state: no students at all
-    if (students.length === 0) {
-      return (
-        <div className="min-h-screen bg-gradient-to-b from-blue-50 via-white to-white px-4 py-4 flex flex-col">
-          <div className="text-center mb-2">
-            <p className="text-xs text-gray-400">{dateStr} 星期{weekDay}</p>
-            <p className="text-sm text-primary-400 font-medium mt-0.5">{encouragement}</p>
-          </div>
-          <div className="flex-1 flex flex-col items-center justify-center text-center">
-            <div className="text-7xl mb-5">📝</div>
-            <h2 className="text-lg font-bold text-gray-700 mb-2">还没有学生</h2>
-            <p className="text-gray-400 text-sm mb-8">点击下方按钮添加第一位学生吧</p>
-            <button onClick={() => navigate('/students')} className="btn-primary px-10 py-3 text-base shadow-lg shadow-primary-200">
-              + 添加学生
-            </button>
-          </div>
-        </div>
-      );
-    }
-
-    // Students exist but no class selected
-    if (groups.length === 0) {
-      return (
-        <div className="min-h-screen bg-gradient-to-b from-blue-50 via-white to-white px-4 py-4 flex flex-col">
-          <div className="text-center mb-4">
-            <p className="text-xs text-gray-400">{dateStr} 星期{weekDay}</p>
-            <p className="text-sm text-primary-400 font-medium mt-0.5">{encouragement}</p>
-          </div>
-          <div className="flex-1 flex flex-col items-center justify-center text-center">
-            <div className="text-6xl mb-4">🏫</div>
-            <h2 className="text-lg font-bold text-gray-700 mb-2">还没有班级</h2>
-            <p className="text-gray-400 text-sm mb-8">请先创建班级，将学生分组后再写反馈</p>
-            <button onClick={() => navigate('/students')} className="btn-primary px-8 py-3 text-base shadow-lg shadow-primary-200">
-              去学生管理创建班级
-            </button>
-          </div>
-        </div>
-      );
-    }
-
     return (
-      <div className="min-h-screen bg-gradient-to-b from-blue-50 via-white to-white px-4 py-4">
-        {/* Welcome header */}
-        <div className="text-center mb-4">
-          <p className="text-xs text-gray-400">{dateStr} 星期{weekDay}</p>
-          <p className="text-sm text-primary-400 font-medium mt-0.5">{encouragement}</p>
-        </div>
+      <div className="px-4 py-4">
+        <h2 className="text-lg font-bold mb-4">选择学生</h2>
 
-        <h2 className="text-lg font-bold mb-3">选择学生</h2>
-
-        {/* Template quick selector */}
-        {templates.length > 0 && (
-          <div className="card mb-3 bg-white shadow-sm">
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-gray-500 whitespace-nowrap">反馈风格：</span>
-              <select
-                className="input text-xs flex-1"
-                value={selectedTemplateId}
-                onChange={e => setSelectedTemplateId(e.target.value)}
-              >
-                <option value="">默认风格</option>
-                {templates.map(t => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}{t.is_default ? ' (默认)' : ''}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-        )}
-        {templates.length === 0 && (
-          <div className="card mb-3 bg-amber-50 border-amber-200">
-            <p className="text-xs text-amber-700">
-              暂无模板，前往<Link to="/templates" className="text-primary-600 underline mx-1">模板制作页</Link>创建后可使用反馈风格。
-            </p>
-          </div>
-        )}
-
-        {/* Class tabs */}
+        {/* Class tabs - single selection */}
         <div className="flex gap-2 mb-3 overflow-x-auto pb-1">
           {groups.map(g => (
             <button
               key={g.id}
               onClick={() => handleClassChange(g.id)}
-              className={`text-sm px-3 py-1.5 rounded-full whitespace-nowrap border shadow-sm transition-colors ${
+              className={`text-sm px-3 py-1.5 rounded-full whitespace-nowrap border ${
                 selectedClassId === g.id
                   ? 'bg-primary-600 text-white border-primary-600'
-                  : 'bg-white text-gray-600 border-gray-200 hover:border-primary-300'
+                  : 'bg-white text-gray-600 border-gray-200'
               }`}
             >
               {g.name} ({g.student_count})
             </button>
           ))}
         </div>
-
-        {!selectedClassId && (
-          <div className="text-center py-10">
-            <div className="text-5xl mb-3">👆</div>
-            <p className="text-gray-500 text-sm">点击班级，选择学生开始写反馈</p>
-          </div>
-        )}
 
         {selectedClassId && (
           <>
@@ -398,7 +302,7 @@ export default function FeedbackNew() {
           {filteredStudents.map(s => (
             <button
               key={s.id}
-              className={`card w-full text-left flex items-center gap-3 bg-white shadow-sm ${
+              className={`card w-full text-left flex items-center gap-3 ${
                 selectedIds.has(s.id) ? 'ring-2 ring-primary-500' : ''
               }`}
               onClick={() => toggleStudent(s.id)}
@@ -418,6 +322,9 @@ export default function FeedbackNew() {
           ))}
           {selectedClassId && filteredStudents.length === 0 && (
             <p className="text-center text-gray-400 py-8 text-sm">该班级暂无学生</p>
+          )}
+          {!selectedClassId && (
+            <p className="text-center text-gray-400 py-8 text-sm">请选择一个班级</p>
           )}
         </div>
 
@@ -471,9 +378,9 @@ export default function FeedbackNew() {
       </div>
 
       {/* Template selector */}
-      {templates.length > 0 ? (
+      {templates.length > 0 && (
         <div className="card mb-4">
-          <p className="label mb-1">反馈风格</p>
+          <p className="label mb-1">选择模板</p>
           <select
             className="input text-sm"
             value={selectedTemplateId}
@@ -486,12 +393,6 @@ export default function FeedbackNew() {
               </option>
             ))}
           </select>
-        </div>
-      ) : (
-        <div className="card mb-4 bg-amber-50 border-amber-200">
-          <p className="text-xs text-amber-700">
-            暂无模板，前往<Link to="/templates" className="text-primary-600 underline mx-1">模板制作页</Link>创建后可使用反馈风格。
-          </p>
         </div>
       )}
 
@@ -515,66 +416,16 @@ export default function FeedbackNew() {
       </div>
 
       <div className="space-y-4">
-        {/* Focus slider */}
+        {/* Focus */}
         <div className="card">
-          <div className="flex items-center justify-between mb-1">
-            <p className="label">专注度 <span className="text-gray-400 font-normal">（可选）</span></p>
-            {current.focus !== undefined && (
-              <span className="text-sm font-medium text-primary-600">{current.focus}%</span>
-            )}
-          </div>
-          <input
-            type="range"
-            min="0"
-            max="100"
-            step="5"
-            value={current.focus ?? 80}
-            onChange={e => updateEval(currentIdx, { focus: parseInt(e.target.value) })}
-            className="w-full h-2 bg-gray-200 rounded-full appearance-none cursor-pointer accent-primary-600"
-          />
-          <div className="flex justify-between text-xs text-gray-400 mt-1">
-            <span>0%</span>
-            <span>50%</span>
-            <span>100%</span>
-          </div>
+          <p className="label mb-1">专注度 <span className="text-gray-400 font-normal">（可选）</span></p>
+          <StarRating value={current.focus} onChange={v => updateEval(currentIdx, { focus: v })} />
         </div>
 
-        {/* Accuracy slider */}
+        {/* Accuracy */}
         <div className="card">
-          <div className="flex items-center justify-between mb-1">
-            <p className="label">正确率 <span className="text-gray-400 font-normal">（可选）</span></p>
-            {current.accuracy !== undefined && (
-              <span className="text-sm font-medium text-primary-600">{current.accuracy}%</span>
-            )}
-          </div>
-          <input
-            type="range"
-            min="0"
-            max="100"
-            step="5"
-            value={current.accuracy ?? 80}
-            onChange={e => updateEval(currentIdx, { accuracy: parseInt(e.target.value) })}
-            className="w-full h-2 bg-gray-200 rounded-full appearance-none cursor-pointer accent-primary-600"
-          />
-          <div className="flex justify-between text-xs text-gray-400 mt-1">
-            <span>0%</span>
-            <span>50%</span>
-            <span>100%</span>
-          </div>
-        </div>
-
-        {/* Show percentages checkbox */}
-        <div className="card">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={current.showPercentages || false}
-              onChange={e => updateEval(currentIdx, { showPercentages: e.target.checked })}
-              className="w-4 h-4 accent-primary-600"
-            />
-            <span className="text-sm text-gray-700">反馈中包含具体百分比</span>
-          </label>
-          <p className="text-xs text-gray-400 mt-1 ml-6">默认不勾选，AI 只输出定性描述（如"专注度很高"），不出现具体数字。</p>
+          <p className="label mb-1">正确率 <span className="text-gray-400 font-normal">（可选）</span></p>
+          <StarRating value={current.accuracy} onChange={v => updateEval(currentIdx, { accuracy: v })} />
         </div>
 
         {/* Mastery */}

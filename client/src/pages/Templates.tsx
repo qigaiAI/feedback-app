@@ -67,7 +67,6 @@ export default function Templates() {
   const [templateName, setTemplateName] = useState('');
   const [isDefault, setIsDefault] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [showIntro, setShowIntro] = useState(false);
 
   const fetchTemplates = async () => {
     try {
@@ -238,44 +237,7 @@ export default function Templates() {
   return (
     <div className="px-4 py-4">
       <h2 className="text-lg font-bold mb-1">模板制作</h2>
-      <p className="text-xs text-gray-400 mb-3">AI 风格模板决定了反馈的语气和格式，最多保存 3 个</p>
-
-      {/* Feature intro card */}
-      <div className="mb-4">
-        <button
-          onClick={() => setShowIntro(!showIntro)}
-          className="flex items-center gap-1 text-sm text-primary-600 mb-2"
-        >
-          <span>{showIntro ? '▾' : '▸'}</span>
-          {showIntro ? '收起' : '了解模板好处'}
-        </button>
-        {showIntro && (
-          <div className="card bg-gradient-to-br from-blue-50 to-white border-blue-200 space-y-3 text-sm">
-            <div>
-              <p className="font-medium text-blue-800">📝 什么是模板？</p>
-              <p className="text-xs text-gray-600 mt-1">模板就是您写反馈的写作风格。每次生成反馈时，AI 会按照您选择的模板来组织语言、调整语气。</p>
-            </div>
-            <div>
-              <p className="font-medium text-blue-800">✨ 模板能帮您做什么？</p>
-              <ul className="text-xs text-gray-600 mt-1 space-y-1">
-                <li>• <b>保持风格一致</b>：每次反馈读起来都像您亲手写的</li>
-                <li>• <b>节省时间</b>：不用每次重复告诉 AI "语气温柔一点"、"先说优点再说不足"</li>
-                <li>• <b>从历史中学习</b>：您可以把之前写过的几条优秀反馈贴进来，AI 会分析您的写作习惯，自动生成一个符合您风格的模板</li>
-              </ul>
-            </div>
-            <div>
-              <p className="font-medium text-blue-800">🎯 如何制作？</p>
-              <ol className="text-xs text-gray-600 mt-1 space-y-0.5 list-decimal list-inside">
-                <li>让 AI 学习您的历史反馈（可选）→ 粘贴几条您自己写的反馈，AI 提取风格</li>
-                <li>编辑风格指令（可自由修改）</li>
-                <li>预览效果 → 输入一段测试表现，看看生成的反馈是否符合预期</li>
-                <li>保存为模板（最多3个）</li>
-              </ol>
-            </div>
-            <p className="text-xs text-primary-500 font-medium">开始制作您的第一个模板吧 👇</p>
-          </div>
-        )}
-      </div>
+      <p className="text-xs text-gray-400 mb-4">AI 风格模板决定了反馈的语气和格式，最多保存 3 个</p>
 
       {!showWizard ? (
         <>

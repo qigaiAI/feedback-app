@@ -17,6 +17,7 @@
     "nodemailer": "^8.0.8",
     "openai": "^4.72.0",
     "pg": "^8.13.0",
+    "tencentcloud-sdk-nodejs": "^4.1.235",
     "uuid": "^10.0.0"
   },
   "devDependencies": {

@@ -21,16 +21,6 @@ interface EvaluationData {
   thinking?: { progress?: string; current?: string };
   habits?: { progress?: string; current?: string };
   knowledge_depth?: { progress?: string; current?: string };
-  show_percentages?: boolean;
-}
-
-function percentToLabel(pct: number): string {
-  if (pct >= 95) return '非常高';
-  if (pct >= 85) return '很高';
-  if (pct >= 75) return '不错';
-  if (pct >= 65) return '一般';
-  if (pct >= 50) return '需要提高';
-  return '需要重点关注';
 }
 
 interface FeedbackInput {
@@ -62,19 +52,11 @@ export function buildFeedbackFacts(input: FeedbackInput): string {
   if (evaluations) {
     const evalLines: string[] = [];
 
-    if (evaluations.focus !== undefined && evaluations.focus !== null) {
-      if (evaluations.show_percentages) {
-        evalLines.push(`- 专注度：${evaluations.focus}%`);
-      } else {
-        evalLines.push(`- 专注度：${percentToLabel(evaluations.focus)}（不要写出具体百分比数字，只做定性描述）`);
-      }
+    if (evaluations.focus) {
+      evalLines.push(`- 专注度：${'★'.repeat(evaluations.focus)}${'☆'.repeat(5 - evaluations.focus)} (${evaluations.focus}/5)`);
     }
-    if (evaluations.accuracy !== undefined && evaluations.accuracy !== null) {
-      if (evaluations.show_percentages) {
-        evalLines.push(`- 正确率：${evaluations.accuracy}%`);
-      } else {
-        evalLines.push(`- 正确率：${percentToLabel(evaluations.accuracy)}（不要写出具体百分比数字，只做定性描述）`);
-      }
+    if (evaluations.accuracy) {
+      evalLines.push(`- 正确率：${'★'.repeat(evaluations.accuracy)}${'☆'.repeat(5 - evaluations.accuracy)} (${evaluations.accuracy}/5)`);
     }
     if (evaluations.mastery) {
       evalLines.push(`- 掌握情况：${evaluations.mastery}`);

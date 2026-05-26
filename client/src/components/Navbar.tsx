@@ -1,5 +1,4 @@
 import { NavLink, useLocation } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
 
 const tabs = [
   { to: '/feedback/new', label: '写反馈', icon: '✏️' },
@@ -10,11 +9,9 @@ const tabs = [
 
 export default function Navbar() {
   const location = useLocation();
-  const { user } = useAuth();
+  const hideNav = location.pathname === '/login';
 
-  if (location.pathname === '/login') return null;
-  // Don't show nav for unverified users - they only see the verification page
-  if (user && !user.email_verified) return null;
+  if (hideNav) return null;
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-40 safe-area-bottom">
@@ -26,7 +23,8 @@ export default function Navbar() {
             className={({ isActive }) =>
               `flex flex-col items-center py-2 px-4 text-xs ${
                 isActive ? 'text-primary-600' : 'text-gray-500'
-              }`}
+              }`
+            }
           >
             <span className="text-xl mb-0.5">{tab.icon}</span>
             <span>{tab.label}</span>
