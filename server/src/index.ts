@@ -12,6 +12,7 @@ import feedbackRoutes from './routes/feedbacks';
 import tagRoutes from './routes/tags';
 import templateRoutes from './routes/template';
 import templatesRoutes from './routes/templates';
+import adminRoutes from './routes/admin';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -28,6 +29,7 @@ app.use('/api/feedbacks', feedbackRoutes);
 app.use('/api/tags', tagRoutes);
 app.use('/api/template', templateRoutes);
 app.use('/api/templates', templatesRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Health check
 app.get('/api/health', (_req, res) => {
