@@ -11,6 +11,7 @@ import FeedbackNew from './pages/FeedbackNew';
 import FeedbackResult from './pages/FeedbackResult';
 import Settings from './pages/Settings';
 import Templates from './pages/Templates';
+import AdminPage from './pages/AdminPage';
 
 function VerifyRequired({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -119,6 +120,7 @@ export default function App() {
         <Route path="/students/:id" element={<VerifyRequired><StudentDetail /></VerifyRequired>} />
         <Route path="/templates" element={<VerifyRequired><Templates /></VerifyRequired>} />
         <Route path="/settings" element={<VerifyRequired><Settings /></VerifyRequired>} />
+        <Route path="/admin" element={<AdminPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       <Navbar />

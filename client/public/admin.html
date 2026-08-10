@@ -31,6 +31,23 @@ tr:hover { background: #fafafa; }
 </style>
 </head>
 <body>
+<script>
+// Clean up old service workers that block /admin.html
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations().then(function(regs) {
+    if (regs.length > 0) {
+      Promise.all(regs.map(function(r) { return r.unregister(); })).then(function() {
+        caches.keys().then(function(keys) {
+          Promise.all(keys.map(function(k) { return caches.delete(k); }));
+        });
+        if (navigator.serviceWorker.controller) {
+          window.location.reload();
+        }
+      });
+    }
+  });
+}
+</script>
 <h1>管理后台</h1>
 <div class="bar">
   <input id="key" type="password" placeholder="Admin Key" style="width:160px">
