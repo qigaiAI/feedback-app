@@ -90,4 +90,57 @@ router.get('/messages', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// ======= Upgrade Keys =======
+
+function generateKey(): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let key = '';
+  for (let i = 0; i < 4; i++) {
+    for (let j = 0; j < 4; j++) {
+      key += chars[Math.floor(Math.random() * chars.length)];
+    }
+    if (i < 3) key += '-';
+  }
+  return key;
+}
+
+// Generate upgrade keys
+router.post('/upgrade-keys/generate', async (req: AuthRequest, res: Response) => {
+  try {
+    const { count = 1 } = req.body;
+    if (count < 1 || count > 50) {
+      return res.status(400).json({ error: '数量需在 1-50 之间' });
+    }
+
+    const keys: string[] = [];
+    for (let i = 0; i < count; i++) {
+      const key = generateKey();
+      await pool.query('INSERT INTO upgrade_keys (key) VALUES ($1)', [key]);
+      keys.push(key);
+    }
+
+    res.json({ keys });
+  } catch (err) {
+    console.error('Generate keys error:', err);
+    res.status(500).json({ error: '生成失败' });
+  }
+});
+
+// List upgrade keys
+router.get('/upgrade-keys', async (req: AuthRequest, res: Response) => {
+  try {
+    const result = await pool.query(
+      `SELECT k.*, u.email AS used_by_email, u.name AS used_by_name
+       FROM upgrade_keys k
+       LEFT JOIN users u ON k.used_by = u.id
+       ORDER BY k.created_at DESC
+       LIMIT 200`
+    );
+    res.json({ keys: result.rows });
+  } catch (err) {
+    console.error('List upgrade keys error:', err);
+    res.status(500).json({ error: '查询失败' });
+  }
+});
+
 export default router;

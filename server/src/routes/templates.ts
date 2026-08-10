@@ -8,18 +8,21 @@ router.use(authMiddleware);
 // List templates
 router.get('/', async (req: AuthRequest, res: Response) => {
   try {
-    const result = await pool.query(
-      'SELECT * FROM templates WHERE teacher_id = $1 ORDER BY created_at DESC',
-      [req.userId]
-    );
-    res.json({ templates: result.rows });
+    const [tRes, uRes] = await Promise.all([
+      pool.query('SELECT * FROM templates WHERE teacher_id = $1 ORDER BY created_at DESC', [req.userId]),
+      pool.query('SELECT template_limit FROM users WHERE id = $1', [req.userId]),
+    ]);
+    res.json({
+      templates: tRes.rows,
+      template_limit: uRes.rows[0]?.template_limit ?? 3,
+    });
   } catch (err) {
     console.error('List templates error:', err);
     res.status(500).json({ error: '获取模板列表失败' });
   }
 });
 
-// Create template (max 3)
+// Create template
 router.post('/', async (req: AuthRequest, res: Response) => {
   try {
     const { name, style_prompt, is_default } = req.body;
@@ -27,12 +30,16 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: '请填写模板名称和风格指令' });
     }
 
+    // Check user's template limit
+    const userRes = await pool.query('SELECT template_limit FROM users WHERE id = $1', [req.userId]);
+    const limit = userRes.rows[0]?.template_limit ?? 3;
+
     const count = await pool.query(
       'SELECT COUNT(*)::int FROM templates WHERE teacher_id = $1',
       [req.userId]
     );
-    if (count.rows[0].count >= 3) {
-      return res.status(400).json({ error: '最多保存3个模板' });
+    if (count.rows[0].count >= limit) {
+      return res.status(400).json({ error: `最多保存${limit}个模板` });
     }
 
     // If setting as default, unset others
@@ -102,6 +109,54 @@ router.put('/:id/default', async (req: AuthRequest, res: Response) => {
   } catch (err) {
     console.error('Set default template error:', err);
     res.status(500).json({ error: '设置默认模板失败' });
+  }
+});
+
+// Redeem upgrade key to increase template limit to 10
+router.post('/upgrade-limit', async (req: AuthRequest, res: Response) => {
+  try {
+    const { key } = req.body;
+    if (!key || typeof key !== 'string') {
+      return res.status(400).json({ error: '请输入密钥' });
+    }
+
+    // Check if user already at max
+    const uRes = await pool.query('SELECT template_limit FROM users WHERE id = $1', [req.userId]);
+    const currentLimit = uRes.rows[0]?.template_limit ?? 3;
+    if (currentLimit >= 10) {
+      return res.status(400).json({ error: '已达到上限（10个）' });
+    }
+
+    // Validate key
+    const kRes = await pool.query(
+      "SELECT * FROM upgrade_keys WHERE key = $1 AND used_by IS NULL",
+      [key.trim().toUpperCase()]
+    );
+    if (kRes.rows.length === 0) {
+      return res.status(400).json({ error: '密钥无效或已被使用' });
+    }
+
+    // Mark key as used and upgrade user
+    await pool.query('BEGIN');
+    try {
+      await pool.query(
+        'UPDATE upgrade_keys SET used_by = $1, used_at = NOW() WHERE id = $2',
+        [req.userId, kRes.rows[0].id]
+      );
+      await pool.query(
+        'UPDATE users SET template_limit = 10 WHERE id = $1',
+        [req.userId]
+      );
+      await pool.query('COMMIT');
+    } catch (txErr) {
+      await pool.query('ROLLBACK');
+      throw txErr;
+    }
+
+    res.json({ success: true, template_limit: 10 });
+  } catch (err) {
+    console.error('Upgrade limit error:', err);
+    res.status(500).json({ error: '兑换失败' });
   }
 });
 

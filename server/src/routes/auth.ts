@@ -28,7 +28,7 @@ router.post('/register', async (req: AuthRequest, res: Response) => {
 
     const password_hash = await bcrypt.hash(password, 10);
     const result = await pool.query(
-      'INSERT INTO users (email, password_hash, name) VALUES ($1, $2, $3) RETURNING id, email, name, role, email_verified, membership_type, style_prompt, created_at',
+      'INSERT INTO users (email, password_hash, name) VALUES ($1, $2, $3) RETURNING id, email, name, role, email_verified, membership_type, style_prompt, nickname, created_at',
       [email, password_hash, name]
     );
     const user = result.rows[0];
@@ -154,7 +154,7 @@ router.post('/login', async (req: AuthRequest, res: Response) => {
     }
 
     const result = await pool.query(
-      'SELECT id, email, password_hash, name, role, email_verified, membership_type, style_prompt, created_at FROM users WHERE email = $1',
+      'SELECT id, email, password_hash, name, role, email_verified, membership_type, style_prompt, nickname, created_at FROM users WHERE email = $1',
       [email]
     );
     if (result.rows.length === 0) {
@@ -179,7 +179,7 @@ router.post('/login', async (req: AuthRequest, res: Response) => {
 router.get('/me', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const result = await pool.query(
-      'SELECT id, email, name, role, email_verified, membership_type, style_prompt, created_at, updated_at FROM users WHERE id = $1',
+      'SELECT id, email, name, role, email_verified, membership_type, style_prompt, nickname, created_at, updated_at FROM users WHERE id = $1',
       [req.userId]
     );
     if (result.rows.length === 0) {
@@ -189,6 +189,42 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res: Response) => {
   } catch (err) {
     console.error('Get me error:', err);
     res.status(500).json({ error: '获取用户信息失败' });
+  }
+});
+
+// Update profile (name, nickname)
+router.put('/profile', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { name, nickname } = req.body;
+    const updates: string[] = [];
+    const params: any[] = [];
+    let idx = 1;
+
+    if (name !== undefined) {
+      updates.push(`name = $${idx++}`);
+      params.push(name);
+    }
+    if (nickname !== undefined) {
+      updates.push(`nickname = $${idx++}`);
+      params.push(nickname || null);
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ error: '没有要更新的字段' });
+    }
+
+    updates.push(`updated_at = now()`);
+    params.push(req.userId);
+
+    const result = await pool.query(
+      `UPDATE users SET ${updates.join(', ')} WHERE id = $${idx} RETURNING id, email, name, role, email_verified, membership_type, style_prompt, nickname, created_at, updated_at`,
+      params
+    );
+
+    res.json({ user: result.rows[0] });
+  } catch (err) {
+    console.error('Update profile error:', err);
+    res.status(500).json({ error: '更新失败' });
   }
 });
 

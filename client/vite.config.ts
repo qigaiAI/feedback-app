@@ -7,6 +7,8 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      injectRegister: false,
+      selfDestroying: true,
       includeAssets: ['icon-192.png', 'icon-512.png'],
       manifest: {
         name: '课后反馈助手',

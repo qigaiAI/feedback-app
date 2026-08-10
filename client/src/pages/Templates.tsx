@@ -48,9 +48,12 @@ const EXAMPLE_TEMPLATE: Template = {
 
 export default function Templates() {
   const [templates, setTemplates] = useState<Template[]>([]);
+  const [templateLimit, setTemplateLimit] = useState(3);
   const [loading, setLoading] = useState(true);
   const [showWizard, setShowWizard] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<Template | null>(null);
+  const [upgradeKey, setUpgradeKey] = useState('');
+  const [redeeming, setRedeeming] = useState(false);
 
   // Wizard state
   const [step, setStep] = useState<1 | 2 | 3>(1);
@@ -75,6 +78,7 @@ export default function Templates() {
         api.get('/api/feedbacks/history?limit=50'),
       ]);
       setTemplates(tRes.data.templates);
+      setTemplateLimit(tRes.data.template_limit ?? 3);
       setFeedbacks(fRes.data.feedbacks || []);
     } catch { /* ignore */ }
     finally { setLoading(false); }
@@ -94,9 +98,22 @@ export default function Templates() {
     setEditingTemplate(null);
   };
 
+  const redeemKey = async () => {
+    if (!upgradeKey.trim()) { alert('请输入密钥'); return; }
+    setRedeeming(true);
+    try {
+      await api.post('/api/templates/upgrade-limit', { key: upgradeKey.trim() });
+      setTemplateLimit(10);
+      setUpgradeKey('');
+      alert('兑换成功！模板上限已提升至 10 个');
+    } catch (err: any) {
+      alert(err.response?.data?.error || '兑换失败');
+    } finally { setRedeeming(false); }
+  };
+
   const openNew = () => {
-    if (templates.length >= 3) {
-      alert('最多保存3个模板，请先删除一个');
+    if (templates.length >= templateLimit) {
+      alert(`最多保存${templateLimit}个模板，请先删除一个`);
       return;
     }
     resetWizard();
@@ -226,8 +243,8 @@ export default function Templates() {
   };
 
   const adoptExample = async () => {
-    if (templates.length >= 3) {
-      alert('最多保存3个模板，请先删除一个');
+    if (templates.length >= templateLimit) {
+      alert(`最多保存${templateLimit}个模板，请先删除一个`);
       return;
     }
     setSaving(true);
@@ -261,7 +278,9 @@ export default function Templates() {
   return (
     <div className="px-4 py-4">
       <h2 className="text-lg font-bold mb-1">模板制作</h2>
-      <p className="text-xs text-gray-400 mb-4">AI 风格模板决定了反馈的语气和格式，最多保存 3 个</p>
+      <p className="text-xs text-gray-400 mb-4">
+        AI 风格模板决定了反馈的语气和格式 · 已用 {templates.length}/{templateLimit} 个
+      </p>
 
       {!showWizard ? (
         <>
@@ -305,9 +324,27 @@ export default function Templates() {
             </div>
           )}
 
-          <button onClick={openNew} className="btn-primary w-full" disabled={templates.length >= 3}>
-            {templates.length >= 3 ? '已达上限（3个）' : '+ 新建模板'}
+          <button onClick={openNew} className="btn-primary w-full" disabled={templates.length >= templateLimit}>
+            {templates.length >= templateLimit ? `已达上限（${templateLimit}个）` : '+ 新建模板'}
           </button>
+
+          {/* Upgrade key section */}
+          {templateLimit < 10 && (
+            <div className="mt-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
+              <p className="text-xs text-gray-500 mb-2">输入升级密钥可提升模板上限至 10 个</p>
+              <div className="flex gap-2">
+                <input
+                  className="input flex-1 text-sm"
+                  placeholder="输入密钥"
+                  value={upgradeKey}
+                  onChange={e => setUpgradeKey(e.target.value.toUpperCase())}
+                />
+                <button onClick={redeemKey} className="btn-primary text-sm" disabled={redeeming || !upgradeKey.trim()}>
+                  {redeeming ? '兑换中...' : '兑换'}
+                </button>
+              </div>
+            </div>
+          )}
         </>
       ) : (
         <>

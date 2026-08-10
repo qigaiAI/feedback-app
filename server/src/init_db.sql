@@ -504,3 +504,22 @@ CREATE INDEX IF NOT EXISTS idx_feedbacks_created ON feedbacks(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_knowledge_tags_parent ON knowledge_tags(parent_id);
 CREATE INDEX IF NOT EXISTS idx_knowledge_tags_level ON knowledge_tags(level);
 CREATE INDEX IF NOT EXISTS idx_behavior_tags_teacher ON behavior_tags(teacher_id);
+
+-- 11. system_config
+CREATE TABLE IF NOT EXISTS system_config (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 12. template_limit on users
+ALTER TABLE users ADD COLUMN IF NOT EXISTS template_limit INTEGER NOT NULL DEFAULT 3;
+
+-- 13. upgrade_keys
+CREATE TABLE IF NOT EXISTS upgrade_keys (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    key TEXT UNIQUE NOT NULL,
+    used_by UUID REFERENCES users(id),
+    used_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);

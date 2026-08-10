@@ -41,6 +41,7 @@ tr:hover { background: #fafafa; }
 <div class="tabs">
   <button class="tab active" onclick="switchTab('users')">用户管理</button>
   <button class="tab" onclick="switchTab('messages')">用户留言</button>
+  <button class="tab" onclick="switchTab('keys')">升级密钥</button>
 </div>
 
 <div id="tab-users">
@@ -54,6 +55,18 @@ tr:hover { background: #fafafa; }
   <div id="msgList"></div>
 </div>
 
+<div id="tab-keys" style="display:none">
+  <div class="bar" style="margin-top:16px">
+    <input id="genCount" type="number" value="5" min="1" max="50" style="width:80px" placeholder="数量">
+    <button onclick="genKeys()">生成密钥</button>
+    <button onclick="loadKeys()">刷新列表</button>
+  </div>
+  <table id="keysTable" style="display:none">
+  <thead><tr><th>密钥</th><th>状态</th><th>使用者</th><th>使用时间</th><th>生成时间</th></tr></thead>
+  <tbody id="keysTbody"></tbody>
+  </table>
+</div>
+
 <script>
 const API = '/api/admin';
 let key = '';
@@ -64,12 +77,14 @@ function msg(text, color = '#333') {
 
 function switchTab(tab) {
   document.querySelectorAll('.tab').forEach((t, i) => {
-    t.classList.toggle('active', (tab === 'users' && i === 0) || (tab === 'messages' && i === 1));
+    t.classList.toggle('active', (tab === 'users' && i === 0) || (tab === 'messages' && i === 1) || (tab === 'keys' && i === 2));
   });
   document.getElementById('tab-users').style.display = tab === 'users' ? '' : 'none';
   document.getElementById('tab-messages').style.display = tab === 'messages' ? '' : 'none';
+  document.getElementById('tab-keys').style.display = tab === 'keys' ? '' : 'none';
   if (tab === 'messages') loadMessages();
   if (tab === 'users') loadUsers();
+  if (tab === 'keys') loadKeys();
 }
 
 // ---- Users ----
@@ -150,6 +165,45 @@ async function loadMessages() {
         <div class="meta">${m.name} (${m.email}) · ${new Date(m.created_at).toLocaleString('zh-CN')}</div>
         <div class="body">${m.content}</div>
       </div>
+    `).join('');
+  } catch (e) { msg('网络错误', 'red'); }
+}
+
+// ---- Upgrade Keys ----
+async function genKeys() {
+  key = document.getElementById('key').value;
+  if (!key) { msg('请输入 Admin Key', 'red'); return; }
+  const count = parseInt(document.getElementById('genCount').value) || 5;
+  try {
+    const r = await fetch(`${API}/upgrade-keys/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Admin-Key': key },
+      body: JSON.stringify({ count })
+    });
+    const data = await r.json();
+    if (data.error) { msg(data.error, 'red'); return; }
+    msg(`已生成 ${data.keys.length} 个密钥`, 'green');
+    loadKeys();
+  } catch (e) { msg('网络错误', 'red'); }
+}
+
+async function loadKeys() {
+  key = document.getElementById('key').value;
+  if (!key) { msg('请输入 Admin Key', 'red'); return; }
+  try {
+    const r = await fetch(`${API}/upgrade-keys`, { headers: { 'X-Admin-Key': key } });
+    const data = await r.json();
+    if (data.error) { msg(data.error, 'red'); return; }
+    msg(`共 ${data.keys.length} 个密钥`, '#333');
+    document.getElementById('keysTable').style.display = data.keys.length ? '' : 'none';
+    document.getElementById('keysTbody').innerHTML = data.keys.map(k => `
+      <tr>
+        <td style="font-family:monospace">${k.key}</td>
+        <td><span class="badge ${k.used_by ? 'badge-no' : 'badge-ok'}">${k.used_by ? '已使用' : '未使用'}</span></td>
+        <td>${k.used_by_name ? `${k.used_by_name} (${k.used_by_email})` : '-'}</td>
+        <td>${k.used_at ? new Date(k.used_at).toLocaleString('zh-CN') : '-'}</td>
+        <td>${new Date(k.created_at).toLocaleString('zh-CN')}</td>
+      </tr>
     `).join('');
   } catch (e) { msg('网络错误', 'red'); }
 }

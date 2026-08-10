@@ -78,12 +78,14 @@ export default function StudentList() {
     setSaving(true);
     try {
       const grade = newGrade === '__custom__' ? newGradeCustom : newGrade;
+      const classId = newClassId === '__custom__' ? '' : newClassId;
+      const className = newClassId === '__custom__' ? newClassName : '';
       await api.post('/api/students', {
         name: newName,
         grade: grade || null,
         notes: newNotes || null,
-        group_ids: newClassId ? [newClassId] : [],
-        new_class_name: newClassName || undefined,
+        group_ids: classId ? [classId] : [],
+        new_class_name: className || undefined,
       });
       setNewName('');
       setNewGrade('');
@@ -147,16 +149,26 @@ export default function StudentList() {
           <div>
             <label className="label text-xs">班级</label>
             <div className="flex gap-2">
-              <select className="input flex-1" value={newClassId} onChange={e => { setNewClassId(e.target.value); setNewClassName(''); }}>
+              <select
+                className="input flex-1"
+                value={newClassId}
+                onChange={e => {
+                  setNewClassId(e.target.value);
+                  if (e.target.value !== '__custom__') setNewClassName('');
+                }}
+              >
                 <option value="">选择班级</option>
                 {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                <option value="__custom__">自定义</option>
               </select>
-              <input
-                className="input flex-1"
-                placeholder="例：周六8-10班"
-                value={newClassName}
-                onChange={e => setNewClassName(e.target.value)}
-              />
+              {newClassId === '__custom__' && (
+                <input
+                  className="input flex-1"
+                  placeholder="例：周六8-10班"
+                  value={newClassName}
+                  onChange={e => setNewClassName(e.target.value)}
+                />
+              )}
             </div>
           </div>
           <div>

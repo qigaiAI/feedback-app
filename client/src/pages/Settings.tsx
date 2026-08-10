@@ -4,7 +4,25 @@ import { api } from '../api/client';
 import Loading from '../components/Loading';
 
 export default function Settings() {
-  const { user, logout } = useAuth();
+  const { user, logout, refreshUser } = useAuth();
+  const [nickname, setNickname] = useState(user?.nickname || '');
+  const [editingNickname, setEditingNickname] = useState(false);
+  const [saveMsg, setSaveMsg] = useState('');
+
+  useEffect(() => {
+    setNickname(user?.nickname || '');
+  }, [user?.nickname]);
+
+  const saveNickname = async () => {
+    try {
+      const res = await api.put('/api/auth/profile', { nickname: nickname.trim() || null });
+      setNickname(res.data.user.nickname || '');
+      await refreshUser();
+      setEditingNickname(false);
+      setSaveMsg('已保存');
+      setTimeout(() => setSaveMsg(''), 2000);
+    } catch { alert('保存失败'); }
+  };
 
   return (
     <div className="px-4 py-4">
@@ -14,7 +32,37 @@ export default function Settings() {
       </div>
 
       <div className="text-sm text-gray-500 mb-4">
-        {user?.name} · {user?.email}
+        {user?.nickname && <span>{user.nickname} · </span>}{user?.name} · {user?.email}
+      </div>
+
+      <div className="card mb-4">
+        <p className="label mb-1">授课老师昵称</p>
+        <p className="text-xs text-gray-400 mb-2">此昵称会显示在课后反馈中的"授课老师"处。</p>
+        {editingNickname ? (
+          <div className="flex gap-2">
+            <input
+              className="input flex-1"
+              placeholder="如：王老师"
+              value={nickname}
+              onChange={e => setNickname(e.target.value)}
+              autoFocus
+            />
+            <button onClick={saveNickname} className="btn-primary text-sm">
+              {saveMsg || '保存'}
+            </button>
+            <button onClick={() => { setEditingNickname(false); setNickname(user?.nickname || ''); }} className="btn-secondary text-sm">
+              取消
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between">
+            <span className="text-sm">{user?.nickname || <span className="text-gray-400">未设置</span>}</span>
+            <button onClick={() => setEditingNickname(true)} className="text-sm text-primary-600">修改</button>
+          </div>
+        )}
+        {saveMsg && !editingNickname && (
+          <p className="text-xs text-green-600 mt-1">{saveMsg}</p>
+        )}
       </div>
 
       <div className="mb-4">

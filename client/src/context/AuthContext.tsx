@@ -5,6 +5,7 @@ interface User {
   id: string;
   email: string;
   name: string;
+  nickname: string | null;
   role: string;
   email_verified: boolean;
   membership_type: string;
@@ -20,6 +21,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, name: string, code: string) => Promise<void>;
   logout: () => void;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -54,14 +56,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(res.data.user);
   };
 
+  const refreshUser = async () => {
+    try {
+      const r = await api.get('/api/auth/me');
+      setUser(r.data.user);
+    } catch { /* ignore */ }
+  };
+
   const logout = () => {
     localStorage.removeItem('token');
+    sessionStorage.removeItem('feedback_draft');
     setToken(null);
     setUser(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, token, loading, login, register, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

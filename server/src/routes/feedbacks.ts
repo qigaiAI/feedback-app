@@ -13,6 +13,10 @@ router.post('/generate', async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: '请选择学生' });
     }
 
+    // Get user info (for teacher name in feedback)
+    const userRes = await pool.query('SELECT name, nickname FROM users WHERE id = $1', [req.userId]);
+    const teacherName = userRes.rows[0]?.nickname || userRes.rows[0]?.name || '';
+
     // Get style prompt from template or user default
     let stylePrompt: string | null = null;
     if (template_id) {
@@ -45,8 +49,6 @@ router.post('/generate', async (req: AuthRequest, res: Response) => {
     for (const item of students) {
       const {
         student_id,
-        evaluations,
-        behavior_tags,
         knowledge_text,
         extra_comment,
         homework,
@@ -79,29 +81,25 @@ router.post('/generate', async (req: AuthRequest, res: Response) => {
 
       const facts = buildFeedbackFacts({
         student: { name: student.name, grade: student.grade, notes: student.notes },
-        evaluations,
-        behavior_tags,
         knowledge_text,
         extra_comment,
         homework,
         previous_feedback_text: prevText,
+        teacher_name: teacherName || undefined,
       });
 
       const content = await generateFeedback(stylePrompt, facts);
 
       // Save to database
-      const usedBehaviorTags = behavior_tags?.length > 0 ? behavior_tags : null;
       const rawInput = {
-        evaluations,
-        behavior_tags: usedBehaviorTags,
         knowledge_text: knowledge_text || null,
         extra_comment: extra_comment || null,
         homework: homework || null,
       };
 
-      await pool.query(
+      const fbResult = await pool.query(
         `INSERT INTO feedbacks (teacher_id, student_id, content, raw_input, homework, previous_feedback_id, knowledge_text, used_template_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
         [
           req.userId,
           student_id,
@@ -114,6 +112,8 @@ router.post('/generate', async (req: AuthRequest, res: Response) => {
         ]
       );
 
+      const feedbackId = fbResult.rows[0].id;
+
       // Cleanup: keep only latest 10 feedbacks per student
       await pool.query(
         `DELETE FROM feedbacks WHERE id IN (
@@ -125,7 +125,7 @@ router.post('/generate', async (req: AuthRequest, res: Response) => {
         [req.userId, student_id]
       );
 
-      results.push({ student_id, content, student_name: student.name });
+      results.push({ id: feedbackId, student_id, content, student_name: student.name });
     }
 
     res.json({ feedbacks: results });
@@ -205,16 +205,37 @@ router.get('/history', async (req: AuthRequest, res: Response) => {
 
 router.get('/last/:studentId', async (req: AuthRequest, res: Response) => {
   try {
+    const limit = Math.min(parseInt(req.query.limit as string) || 1, 5);
     const result = await pool.query(
       `SELECT * FROM feedbacks
        WHERE teacher_id = $1 AND student_id = $2 AND is_deleted = false
-       ORDER BY created_at DESC LIMIT 1`,
-      [req.userId, req.params.studentId]
+       ORDER BY created_at DESC LIMIT $3`,
+      [req.userId, req.params.studentId, limit]
     );
-    res.json({ feedback: result.rows[0] || null });
+    res.json({ feedbacks: result.rows });
   } catch (err) {
     console.error('Get last feedback error:', err);
     res.status(500).json({ error: '获取上节课反馈失败' });
+  }
+});
+
+router.put('/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const { content } = req.body;
+    if (!content) {
+      return res.status(400).json({ error: '内容不能为空' });
+    }
+    const result = await pool.query(
+      'UPDATE feedbacks SET content = $1, updated_at = now() WHERE id = $2 AND teacher_id = $3 RETURNING id',
+      [content, req.params.id, req.userId]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: '反馈不存在' });
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Update feedback error:', err);
+    res.status(500).json({ error: '更新失败' });
   }
 });
 

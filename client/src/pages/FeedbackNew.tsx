@@ -1,7 +1,6 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { api } from '../api/client';
-import PercentSlider from '../components/PercentSlider';
 import Loading from '../components/Loading';
 
 interface Student {
@@ -18,12 +17,6 @@ interface Group {
   student_count: number;
 }
 
-interface BehaviorTag {
-  id: string;
-  name: string;
-  teacher_id: string | null;
-}
-
 interface Template {
   id: string;
   name: string;
@@ -31,9 +24,10 @@ interface Template {
   is_default: boolean;
 }
 
-interface DimensionEval {
-  progress?: string;
-  current?: string;
+interface PrevFeedback {
+  id: string;
+  content: string;
+  created_at: string;
 }
 
 interface StudentEval {
@@ -41,24 +35,16 @@ interface StudentEval {
   student_name: string;
   student_grade: string | null;
   student_notes: string | null;
-  focus?: number;
-  accuracy?: number;
-  participation: DimensionEval;
-  thinking: DimensionEval;
-  habits: DimensionEval;
-  knowledge_depth: DimensionEval;
-  behavior_tags: string[];
   knowledge_text: string;
   extra_comment: string;
   homework: string;
   previous_feedback_id: string | null;
   previous_feedback_text: string;
+  previous_feedbacks: PrevFeedback[];
   lastFeedbackLoaded: boolean;
   lastFeedbackLoading: boolean;
 }
 
-const PROGRESS_OPTS = ['有进步', '进步很大', '状态保持', '有所退步', '退步比较明显'];
-const CURRENT_OPTS = ['还需提高', '基本达标', '还不错', '非常好', '表现卓越'];
 export default function FeedbackNew() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -79,8 +65,6 @@ export default function FeedbackNew() {
   // Evaluation
   const [evals, setEvals] = useState<StudentEval[]>([]);
   const [currentIdx, setCurrentIdx] = useState(0);
-  const [inheritContent, setInheritContent] = useState(true);
-  const [behaviorTags, setBehaviorTags] = useState<BehaviorTag[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
 
@@ -93,22 +77,46 @@ export default function FeedbackNew() {
       if (locationState.returnTemplateId) {
         setSelectedTemplateId(locationState.returnTemplateId);
       }
-      // Clear the location state so it doesn't persist on refresh
+      sessionStorage.setItem('feedback_draft', JSON.stringify({
+        evals: locationState.returnEvals,
+        selectedTemplateId: locationState.returnTemplateId,
+      }));
       window.history.replaceState({}, '');
+    } else if (!locationState) {
+      // Restore from sessionStorage (navigated away and back)
+      const draft = sessionStorage.getItem('feedback_draft');
+      if (draft) {
+        try {
+          const parsed = JSON.parse(draft);
+          if (parsed.evals && parsed.evals.length > 0) {
+            setEvals(parsed.evals);
+            setSelectedTemplateId(parsed.selectedTemplateId || '');
+            setPhase('evaluate');
+          }
+        } catch { /* ignore */ }
+      }
     }
   }, []);
+
+  // Persist eval state to sessionStorage whenever it changes in evaluate phase
+  useEffect(() => {
+    if (phase === 'evaluate' && evals.length > 0) {
+      sessionStorage.setItem('feedback_draft', JSON.stringify({
+        evals,
+        selectedTemplateId,
+      }));
+    }
+  }, [evals, selectedTemplateId, phase]);
 
   useEffect(() => {
     Promise.all([
       api.get('/api/students'),
       api.get('/api/groups'),
-      api.get('/api/tags/behavior'),
       api.get('/api/templates'),
     ])
-      .then(([sRes, gRes, btRes, tRes]) => {
+      .then(([sRes, gRes, tRes]) => {
         setStudents(sRes.data.students);
         setGroups(gRes.data.groups);
-        setBehaviorTags(btRes.data.tags);
         setTemplates(tRes.data.templates);
         const def = tRes.data.templates.find((t: Template) => t.is_default);
         if (def) setSelectedTemplateId(def.id);
@@ -159,38 +167,36 @@ export default function FeedbackNew() {
     const selected = students.filter(s => selectedIds.has(s.id));
     const evl: StudentEval[] = await Promise.all(
       selected.map(async (s) => {
-        // Fetch last feedback for this student
+        // Fetch last 3 feedbacks for reference selection
         let prevId: string | null = null;
         let prevText = '';
+        let prevFeedbacks: PrevFeedback[] = [];
         let loaded = false;
         let loadingDone = false;
         try {
-          const r = await api.get(`/api/feedbacks/last/${s.id}`);
+          const r = await api.get(`/api/feedbacks/last/${s.id}?limit=3`);
           loadingDone = true;
-          if (r.data.feedback) {
-            prevId = r.data.feedback.id;
-            prevText = r.data.feedback.content;
+          if (r.data.feedbacks && r.data.feedbacks.length > 0) {
+            prevFeedbacks = r.data.feedbacks;
+            prevId = r.data.feedbacks[0].id;
+            prevText = r.data.feedbacks[0].content;
           }
           loaded = true;
-        } catch { loaded = true; }
+        } catch { loaded = true; loadingDone = true; }
 
         return {
           student_id: s.id,
           student_name: s.name,
           student_grade: s.grade,
           student_notes: s.notes,
-          behavior_tags: [],
           knowledge_text: '',
           extra_comment: '',
           homework: '',
           previous_feedback_id: prevId,
           previous_feedback_text: prevText,
+          previous_feedbacks: prevFeedbacks,
           lastFeedbackLoaded: loaded,
           lastFeedbackLoading: !loadingDone,
-          participation: {},
-          thinking: {},
-          habits: {},
-          knowledge_depth: {},
         };
       })
     );
@@ -201,14 +207,6 @@ export default function FeedbackNew() {
 
   const updateEval = (idx: number, updates: Partial<StudentEval>) => {
     setEvals(prev => prev.map((e, i) => (i === idx ? { ...e, ...updates } : e)));
-  };
-
-  const updateDim = (idx: number, dim: string, field: 'progress' | 'current', value: string | undefined) => {
-    setEvals(prev => prev.map((e, i) => {
-      if (i !== idx) return e;
-      const current = (e as any)[dim] || {};
-      return { ...e, [dim]: { ...current, [field]: current[field] === value ? undefined : value } };
-    }));
   };
 
   const generate = async () => {
@@ -224,15 +222,6 @@ export default function FeedbackNew() {
       // Clean evals before sending
       const payload = evals.map(e => ({
         student_id: e.student_id,
-        evaluations: {
-          focus: e.focus,
-          accuracy: e.accuracy,
-          participation: e.participation?.progress || e.participation?.current ? e.participation : undefined,
-          thinking: e.thinking?.progress || e.thinking?.current ? e.thinking : undefined,
-          habits: e.habits?.progress || e.habits?.current ? e.habits : undefined,
-          knowledge_depth: e.knowledge_depth?.progress || e.knowledge_depth?.current ? e.knowledge_depth : undefined,
-        },
-        behavior_tags: e.behavior_tags.length > 0 ? e.behavior_tags : undefined,
         knowledge_text: e.knowledge_text || undefined,
         extra_comment: e.extra_comment || undefined,
         homework: e.homework || undefined,
@@ -244,6 +233,7 @@ export default function FeedbackNew() {
         template_id: selectedTemplateId || undefined,
         students: payload,
       });
+      sessionStorage.removeItem('feedback_draft');
       navigate('/feedback/result', {
         state: {
           feedbacks: res.data.feedbacks,
@@ -367,7 +357,7 @@ export default function FeedbackNew() {
     <div className="px-4 py-4">
       {/* Header with progress */}
       <div className="flex items-center justify-between mb-3">
-        <button onClick={() => setPhase('select')} className="text-sm text-primary-600">&larr; 返回选人</button>
+        <button onClick={() => { setPhase('select'); sessionStorage.removeItem('feedback_draft'); }} className="text-sm text-primary-600">&larr; 返回选人</button>
         <span className="text-sm text-gray-500">{currentIdx + 1} / {evals.length}</span>
       </div>
       <div className="w-full bg-gray-200 rounded-full h-1 mb-3">
@@ -413,37 +403,42 @@ export default function FeedbackNew() {
         <p className="text-sm font-medium text-amber-800 mb-2">上节课反馈引用</p>
         {current.lastFeedbackLoading ? (
           <p className="text-xs text-gray-400">加载中...</p>
-        ) : current.lastFeedbackLoaded && current.previous_feedback_text ? (
-          <div className="text-xs text-amber-700 whitespace-pre-wrap bg-white rounded p-2 border border-amber-100 max-h-32 overflow-y-auto">
-            {current.previous_feedback_text}
-          </div>
         ) : (
-          <textarea
-            className="input text-xs min-h-[60px]"
-            placeholder="粘贴上节课反馈（可选），让 AI 写出更连贯的评语..."
-            value={current.previous_feedback_text}
-            onChange={e => updateEval(currentIdx, { previous_feedback_text: e.target.value })}
-          />
+          <>
+            {current.previous_feedbacks.length > 0 && (
+              <select
+                className="input text-xs mb-2"
+                value={current.previous_feedback_id || ''}
+                onChange={e => {
+                  const selected = current.previous_feedbacks.find(f => f.id === e.target.value);
+                  updateEval(currentIdx, {
+                    previous_feedback_id: selected?.id || null,
+                    previous_feedback_text: selected?.content || '',
+                  });
+                }}
+              >
+                {current.previous_feedbacks.map((f, i) => (
+                  <option key={f.id} value={f.id}>
+                    第{i + 1}条 — {new Date(f.created_at).toLocaleDateString('zh-CN')}
+                  </option>
+                ))}
+                <option value="">自己粘贴（不使用历史反馈）</option>
+              </select>
+            )}
+            <textarea
+              className="input text-xs min-h-[80px]"
+              placeholder="引用上节课反馈（可选），可编辑修改，让 AI 写出更连贯的评语..."
+              value={current.previous_feedback_text}
+              onChange={e => updateEval(currentIdx, { previous_feedback_text: e.target.value })}
+            />
+          </>
         )}
       </div>
 
       <div className="space-y-4">
-        {/* Knowledge text (required) — moved to top */}
+        {/* Knowledge text (required) */}
         <div className="card">
-          <div className="flex items-center justify-between mb-1">
-            <p className="label"><span className="text-red-500">*</span> 本节课学习内容</p>
-            {currentIdx > 0 && (
-              <label className="flex items-center gap-1 text-xs text-gray-400">
-                <input
-                  type="checkbox"
-                  checked={inheritContent}
-                  onChange={e => setInheritContent(e.target.checked)}
-                  className="w-3.5 h-3.5"
-                />
-                沿用上一位学生
-              </label>
-            )}
-          </div>
+          <p className="label mb-1"><span className="text-red-500">*</span> 本节课学习内容</p>
           <textarea
             className="input min-h-[70px]"
             placeholder="直接输入本节课所学内容，如：分数乘法、约分、应用题..."
@@ -452,102 +447,15 @@ export default function FeedbackNew() {
           />
         </div>
 
-        {/* Homework — 推荐 */}
+        {/* Homework */}
         <div className="card">
-          <p className="label mb-1">课后作业 <span className="text-gray-400 font-normal">（推荐）</span></p>
+          <p className="label mb-1">课后作业</p>
           <input
             className="input"
             placeholder="如：练习册第10页1-3题"
             value={current.homework}
             onChange={e => updateEval(currentIdx, { homework: e.target.value })}
           />
-        </div>
-
-        {/* Four dimensions — 推荐标签放前面 */}
-        {([
-          { key: 'thinking', label: '思维与反应质量', rec: true },
-          { key: 'knowledge_depth', label: '知识掌握程度', rec: true },
-          { key: 'participation', label: '参与互动度', rec: false },
-          { key: 'habits', label: '学习习惯', rec: false },
-        ] as const).map(dim => {
-          const val = (current as any)[dim.key] as DimensionEval;
-          return (
-            <div key={dim.key} className="card">
-              <p className="label mb-2">{dim.label} <span className="text-gray-400 font-normal">{dim.rec ? '（推荐）' : '（可选）'}</span></p>
-
-              {/* Progress eval */}
-              <p className="text-xs text-gray-500 mb-1">进步评价（相对于上节课）</p>
-              <div className="flex flex-wrap gap-1.5 mb-3">
-                {PROGRESS_OPTS.map(opt => (
-                  <button
-                    key={opt}
-                    onClick={() => updateDim(currentIdx, dim.key, 'progress', opt)}
-                    className={`text-xs px-2.5 py-1 rounded-full border ${
-                      val?.progress === opt
-                        ? 'bg-green-100 border-green-400 text-green-700'
-                        : 'bg-white border-gray-200 text-gray-500'
-                    }`}
-                  >
-                    {opt}
-                  </button>
-                ))}
-              </div>
-
-              {/* Current eval */}
-              <p className="text-xs text-gray-500 mb-1">当前表现评价</p>
-              <div className="flex flex-wrap gap-1.5">
-                {CURRENT_OPTS.map(opt => (
-                  <button
-                    key={opt}
-                    onClick={() => updateDim(currentIdx, dim.key, 'current', opt)}
-                    className={`text-xs px-2.5 py-1 rounded-full border ${
-                      val?.current === opt
-                        ? 'bg-blue-100 border-blue-400 text-blue-700'
-                        : 'bg-white border-gray-200 text-gray-500'
-                    }`}
-                  >
-                    {opt}
-                  </button>
-                ))}
-              </div>
-            </div>
-          );
-        })}
-
-        {/* Behavior tags */}
-        <div className="card">
-          <p className="label mb-2">课堂表现标签</p>
-          <div className="flex flex-wrap gap-2">
-            {behaviorTags.map(t => (
-              <button
-                key={t.id}
-                onClick={() => {
-                  const cur = current.behavior_tags;
-                  const next = cur.includes(t.name) ? cur.filter(x => x !== t.name) : [...cur, t.name];
-                  updateEval(currentIdx, { behavior_tags: next });
-                }}
-                className={`text-sm px-3 py-1.5 rounded-full border ${
-                  current.behavior_tags.includes(t.name)
-                    ? 'bg-primary-100 border-primary-300 text-primary-700'
-                    : 'bg-white border-gray-200 text-gray-600'
-                }`}
-              >
-                {t.name}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Focus */}
-        <div className="card">
-          <p className="label mb-1">专注度 <span className="text-gray-400 font-normal">（可选）</span></p>
-          <PercentSlider value={current.focus} onChange={v => updateEval(currentIdx, { focus: v })} />
-        </div>
-
-        {/* Accuracy */}
-        <div className="card">
-          <p className="label mb-1">正确率 <span className="text-gray-400 font-normal">（可选）</span></p>
-          <PercentSlider value={current.accuracy} onChange={v => updateEval(currentIdx, { accuracy: v })} />
         </div>
 
         {/* Extra comment */}
@@ -571,26 +479,7 @@ export default function FeedbackNew() {
           {currentIdx < evals.length - 1 ? (
             <button
               className="btn-primary flex-1"
-              onClick={() => {
-                const prev = evals[currentIdx];
-                setCurrentIdx(i => {
-                  const next = i + 1;
-                  // Inherit content from previous student
-                  if (inheritContent) {
-                    setEvals(prevEvals => prevEvals.map((e, idx) => {
-                      if (idx === next) {
-                        return {
-                          ...e,
-                          knowledge_text: e.knowledge_text || prev.knowledge_text,
-                          homework: e.homework || prev.homework,
-                        };
-                      }
-                      return e;
-                    }));
-                  }
-                  return next;
-                });
-              }}
+              onClick={() => setCurrentIdx(i => i + 1)}
             >
               下一个学生
             </button>

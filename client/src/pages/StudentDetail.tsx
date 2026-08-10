@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
+import { copyToClipboard } from '../utils/clipboard';
 import Loading from '../components/Loading';
 import ErrorMsg from '../components/ErrorMsg';
 
@@ -39,6 +40,7 @@ export default function StudentDetail() {
   const [editNewClassName, setEditNewClassName] = useState('');
   const [groups, setGroups] = useState<Group[]>([]);
   const [saving, setSaving] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -178,18 +180,30 @@ export default function StudentDetail() {
               {new Date(f.created_at).toLocaleString('zh-CN')}
             </p>
             <p className="text-sm whitespace-pre-wrap">{f.content}</p>
-            <button
-              onClick={async () => {
-                if (!confirm('确定删除这条反馈？')) return;
-                try {
-                  await api.delete(`/api/feedbacks/${f.id}`);
-                  setFeedbacks(prev => prev.filter(x => x.id !== f.id));
-                } catch { alert('删除失败'); }
-              }}
-              className="absolute top-3 right-3 text-xs text-red-400 px-2 py-1"
-            >
-              删除
-            </button>
+            <div className="absolute top-3 right-3 flex gap-2">
+              <button
+                onClick={async () => {
+                  await copyToClipboard(f.content);
+                  setCopiedId(f.id);
+                  setTimeout(() => setCopiedId(null), 2000);
+                }}
+                className="text-xs text-primary-600 px-2 py-1"
+              >
+                {copiedId === f.id ? '已复制' : '复制'}
+              </button>
+              <button
+                onClick={async () => {
+                  if (!confirm('确定删除这条反馈？')) return;
+                  try {
+                    await api.delete(`/api/feedbacks/${f.id}`);
+                    setFeedbacks(prev => prev.filter(x => x.id !== f.id));
+                  } catch { alert('删除失败'); }
+                }}
+                className="text-xs text-red-400 px-2 py-1"
+              >
+                删除
+              </button>
+            </div>
           </div>
         ))}
         {feedbacks.length === 0 && (

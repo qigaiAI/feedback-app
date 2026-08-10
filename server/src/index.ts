@@ -14,6 +14,7 @@ import templateRoutes from './routes/template';
 import templatesRoutes from './routes/templates';
 import adminRoutes from './routes/admin';
 import messageRoutes from './routes/messages';
+import { checkAndPromoteGrades } from './services/grades';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -40,4 +41,6 @@ app.get('/api/health', (_req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Feedback server running on port ${PORT}`);
+  // Check and run grade promotion if it's September 1 or later
+  checkAndPromoteGrades();
 });
